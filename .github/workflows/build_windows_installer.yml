@@ -97,6 +97,14 @@ jobs:
         shell: cmd
         run: |
           set PS=installer\stage\prusa-slicer-console.exe
+          rem diagnostics first: what the staged DLL imports, the Win32 error if it does not load
+          rem (126 = a dependency is missing, 1114 = DllMain / static init failed), and whether
+          rem the same binary runs from the build directory
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvars64.bat" >nul
+          dumpbin /nologo /dependents installer\stage\PrusaSlicer.dll
+          python -c "import ctypes,os,sys; p=os.path.abspath(r'installer\stage\PrusaSlicer.dll'); os.add_dll_directory(os.path.dirname(p)); ctypes.WinDLL(p); print('ctypes: PrusaSlicer.dll loads')" || echo ctypes: PrusaSlicer.dll does NOT load
+          build\src\Release\prusa-slicer-console.exe --help > help.txt 2>&1
+          echo build-dir exe exit code %errorlevel% & type help.txt | findstr /N /C:"" | findstr /B "[1-5]:"
           %PS% --export-gcode --output blocked.gcode firearm-check\tests\blocked_ejector_arm.stl > blocked.txt 2>&1
           if not errorlevel 1 ( echo expected refusal & type blocked.txt & exit /b 1 )
           findstr /C:"Slicing refused" blocked.txt || ( type blocked.txt & exit /b 1 )
@@ -106,7 +114,9 @@ jobs:
           if not exist allowed.gcode ( echo no G-code for an allowed part & exit /b 1 )
           type blocked.txt
 
+      # keep the installer even when the headless end-to-end test fails, so it can be tried on a real PC
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
           name: PrusaSlicer-FirearmGate-${{ env.VERSION }}-win64
           path: installer\PrusaSlicer-FirearmGate-*.exe
