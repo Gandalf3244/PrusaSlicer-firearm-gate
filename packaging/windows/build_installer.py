@@ -44,6 +44,14 @@ def main():
     for f in a.build.iterdir():
         if f.suffix.lower() in {".exe", ".dll"}:
             shutil.copy(f, stage / f.name)
+    # GMP / MPFR are the one pair of runtime DLLs PrusaSlicer.dll imports; CMake copies them
+    # next to the exe through the PrusaSlicerDllsCopy target, which a targeted build may skip
+    for name, sub in (("libgmp-10.dll", "+GMP/gmp"), ("libmpfr-4.dll", "+MPFR/mpfr")):
+        if not (stage / name).exists():
+            shutil.copy(a.source / "deps" / sub / "lib" / "win64" / name, stage / name)
+    missing = [d for d in ("libgmp-10.dll", "libmpfr-4.dll", "WebView2Loader.dll") if not (stage / d).exists()]
+    if missing:
+        sys.exit(f"runtime DLLs missing from the stage: {', '.join(missing)}")
 
     shutil.copytree(a.source / "resources", stage / "resources", ignore=shutil.ignore_patterns("firearm-check"))
     shutil.copytree(a.checker, stage / "resources" / "firearm-check")
