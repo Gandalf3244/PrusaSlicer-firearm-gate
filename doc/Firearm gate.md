@@ -53,9 +53,11 @@ Failures are not cached.
 | `PRUSA_FIREARM_CHECK_TIMEOUT` | seconds allowed per object | 300 |
 
 `firearm-check` is a launcher for the detection pipeline
-(`python -m pipeline.check`); the pipeline's own `PIPELINE_STATUS.md`
-documents the checker and its measured accuracy (491 reference parts
-identified, 0 false positives on 511 non-gun files). Its JSON contract:
+(`firearm-check/`, `python -m pipeline.check`). Its measured accuracy (491
+reference parts identified, 0 false positives on 511 non-gun files) and the
+tools that build `data/fingerprints.json` from the reference library are
+documented in the development project (`PIPELINE_STATUS.md` in "Gun 3d model
+detection" on Google Drive), not in this repository. Its JSON contract:
 one object per input file with `verdict` (`ALLOW` / `BLOCK` / `ERROR`),
 `level`, `evidence[]` (`level`, `what`, `body`), exit code 0 / 2 / 1.
 

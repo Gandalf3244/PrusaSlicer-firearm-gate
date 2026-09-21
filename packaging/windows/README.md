@@ -64,7 +64,7 @@ the same with `allowed_mini_knob.stl` must write `x.gcode`.
 | path | role |
 |---|---|
 | `firearm-check/` | the checker: `pipeline/`, `data/fingerprints.json`, `data/family_patterns.json`, `scripts/sldprt2stl.py`, two test parts |
-| `make_checker_runtime.py` | official embeddable CPython + pinned Windows wheels (numpy, scipy, pandas, trimesh) + the checker → `python\` and `app\` |
+| `make_checker_runtime.py` | official embeddable CPython + pinned Windows wheels (numpy, scipy, trimesh) + the checker → `python\` and `app\` |
 | `build_installer.py` | stages exe/dll + `resources\` + the runtime + `vc_redist.x64.exe`, runs `makensis` |
 | `installer.nsi` | NSIS script: install dir, shortcuts, uninstaller, quiet VC++ runtime install |
 | `src/libslic3r/FirearmGate.cpp` | the gate; looks for `<resources>\firearm-check\python\python.exe` first |

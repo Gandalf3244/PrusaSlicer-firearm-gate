@@ -98,28 +98,16 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]
     return sorted(out, key=lambda r: (-r["confidence"], -r["n_elements"], r["worst_residual_frac"]))
 
 
-def prune_by_family(fps: list[Fingerprint], families: set[str], fam_of: dict[str, list[str]]) -> list[Fingerprint]:
-    """Keep fingerprints of parts in `families`, plus parts of unknown family."""
-    return [fp for fp in fps if set(fam_of.get(fp.source, ["other"])) & (families | {"other"})]
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("stl")
     ap.add_argument("--loose", action="store_true")
     ap.add_argument("--audit", action="store_true", help="print per-constraint residuals")
-    ap.add_argument("--family", nargs="*", help="restrict part fingerprints to these families (step 6 pruning)")
-    ap.add_argument("--prune", action="store_true", help="restrict part fingerprints to the families whose patterns are present")
     a = ap.parse_args()
-    from .families import classify_family, load_families, load_family_patterns
+    from .families import classify_family, load_family_patterns
     fps = load_fingerprints()
     sig = signature_of_file(Path(a.stl))
     fam_hits = classify_family(sig, load_family_patterns())
-    if a.family or a.prune:
-        fam_of = load_families()
-        chosen = set(a.family or []) | (set(fam_hits) if a.prune else set())
-        fps = prune_by_family(fps, chosen, fam_of)
-        print(f"  family pruning -> {len(fps)} fingerprints for {sorted(chosen)} (+ unknown-family parts)")
     from .calibers import bore_evidence
     hits = detect(sig, fps, a.loose)
     if not a.loose:

@@ -2,8 +2,15 @@
 # Launcher for PrusaSlicer's firearm-part gate (src/libslic3r/FirearmGate.cpp).
 # PrusaSlicer runs:  firearm-check --json --units mm /tmp/prusaslicer-firearm-XXXX.stl
 # and reads one JSON verdict line from stdout. Exit 0 = ALLOW, 2 = BLOCK, 1 = unreadable.
+#
+# GUN3D_ROOT    folder holding pipeline/ and data/ (default: the firearm-check/ dir this script lives in)
+# GUN3D_PYTHON  interpreter with numpy, scipy and trimesh (default: ~/.venvs/gun3d, else python3 on PATH)
 set -euo pipefail
-GUN3D_ROOT="${GUN3D_ROOT:-$HOME/GoogleDrive/Gun 3d model detection}"
-GUN3D_PYTHON="${GUN3D_PYTHON:-$HOME/.venvs/gun3d/bin/python}"
+here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+GUN3D_ROOT="${GUN3D_ROOT:-$(dirname "$here")}"
+if [[ -z "${GUN3D_PYTHON:-}" ]]; then
+    GUN3D_PYTHON="$HOME/.venvs/gun3d/bin/python"
+    [[ -x "$GUN3D_PYTHON" ]] || GUN3D_PYTHON=python3
+fi
 cd "$GUN3D_ROOT"
 exec "$GUN3D_PYTHON" -m pipeline.check "$@"

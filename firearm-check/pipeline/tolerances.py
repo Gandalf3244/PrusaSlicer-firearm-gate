@@ -39,7 +39,7 @@ LOOSE = Band(diameter=0.12, length=0.50, distance=0.30, angle_deg=2.0, coverage=
 # Diameters shared by many models (step 2 collision table). A single hole at
 # one of these sizes is never a fingerprint on its own; it needs a compound
 # relation (distance/angle to another primitive) before it carries identity.
-# Regenerate with: python -m pipeline.similarity  -> data/analysis/hole_diameter_collisions.csv
+# Regenerate with pipeline.similarity in the development project (data/analysis/hole_diameter_collisions.csv)
 GENERIC_HOLE_MIN_MODELS = 5
 
 

@@ -19,7 +19,6 @@ explained.
 from __future__ import annotations
 
 import itertools
-import json
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -276,10 +275,6 @@ def _axis_point(h: dict) -> np.ndarray:
     that identifies the axis line independent of where the centre sits."""
     c, a = np.asarray(h["c"]), np.asarray(h["a"])
     return c - (c @ a) * a
-
-
-def load_signatures(path="data/signatures.jsonl") -> dict[str, dict]:
-    return {r["path"]: r for r in (json.loads(l) for l in open(path)) if "error" not in r}
 
 
 def best_partial(fp: Fingerprint, target: dict, band: Band = TIGHT, band_name: str = "TIGHT",

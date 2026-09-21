@@ -1,9 +1,8 @@
 """Per-part primitive-composition signature (report: Choice 1, recommended option).
 
 A signature is the full list of fitted primitives in a pose-independent form,
-plus global shape descriptors. It is stored as JSON so fingerprints (Choice 2:
-compound dimension sets) can be defined and re-evaluated later without
-re-fitting meshes.
+plus global shape descriptors. Fingerprints (Choice 2: compound dimension
+sets) are defined over signatures, so a reference part is fitted once.
 
 Pose independence: every quantity is either scalar (diameter, length, area,
 angle) or a *relation* between two primitives (centre distance, axis angle),
@@ -11,21 +10,10 @@ never an absolute coordinate.
 """
 from __future__ import annotations
 
-import json
-import sys
-import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from pathlib import Path
-
 import numpy as np
 import trimesh
 
 from .primitives import Segmentation, segment
-from .units import infer_scale, load_mesh
-
-ROOT = Path(__file__).resolve().parents[1]
-REPO = ROOT / "fosscad-repo"
-DATA = ROOT / "data"
 
 MIN_HOLE_AREA = 3.0        # mm^2: ignore text/engraving-scale cylinders
 MIN_COVERAGE = 0.45        # a hole must be at least a half-circle to carry a dimension
@@ -124,66 +112,3 @@ def primitive_features(seg: Segmentation, concavity_ambiguous: bool = False) -> 
                    for p in planes if p.area >= 5.0],
         "plane_dirs": [{"area": _r(d["area"], 1), "count": d["count"]} for d in dirs[:12]],
     }
-
-
-def signature_for(rel_path: str) -> dict:
-    mesh = load_mesh(REPO / rel_path, rel_path)
-    seg = segment(mesh)
-    out = {"path": rel_path, "noise": _r(seg.noise, 5),
-           "concavity_ambiguous": bool(mesh.metadata.get("concavity_ambiguous", False))}
-    out.update(global_features(mesh))
-    out.update(primitive_features(seg, out["concavity_ambiguous"]))
-    return out
-
-
-def _worker(rel_path: str) -> dict:
-    try:
-        return signature_for(rel_path)
-    except Exception as e:  # noqa: BLE001
-        return {"path": rel_path, "error": f"{type(e).__name__}: {e}"[:300]}
-
-
-def main(out: Path = DATA / "signatures.jsonl", workers: int = 16, limit: int | None = None,
-         update: bool = False):
-    """Fit every unique geometry in the inventory. With `update`, only files
-    not yet in the signature file are fitted and files no longer in the
-    inventory are dropped - adding a new model / family to fosscad-repo is
-    then: python -m pipeline.inventory && python -m pipeline.signature --update
-    && python -m pipeline.curate && python -m pipeline.families."""
-    import pandas as pd
-    inv = pd.read_csv(DATA / "inventory.csv")
-    # one representative per unique geometry (ascii/binary duplicates share a hash)
-    inv = inv[inv.error.isna()].drop_duplicates("geom_hash")
-    # big meshes first so the pool tail is short
-    paths = list(inv.sort_values("n_faces", ascending=False).path)
-    if limit:
-        paths = paths[:limit]
-    existing: dict[str, str] = {}
-    if update and out.exists():
-        for line in out.open():
-            r = json.loads(line)
-            if "error" not in r:
-                existing[r["path"]] = line
-        keep = {p: existing[p] for p in paths if p in existing}
-        paths = [p for p in paths if p not in existing]
-        print(f"{len(keep)} signatures kept, {len(existing) - len(keep)} dropped, {len(paths)} new", file=sys.stderr)
-    else:
-        keep = {}
-    print(f"{len(paths)} unique geometries to fit", file=sys.stderr)
-    done = 0
-    t0 = time.time()
-    with out.open("w") as fh, ProcessPoolExecutor(workers) as ex:
-        for line in keep.values():
-            fh.write(line if line.endswith("\n") else line + "\n")
-        futs = {ex.submit(_worker, p): p for p in paths}
-        for fut in as_completed(futs):
-            fh.write(json.dumps(fut.result()) + "\n"); fh.flush()
-            done += 1
-            if done % 100 == 0:
-                print(f"  {done}/{len(paths)}", file=sys.stderr)
-    print(f"wrote {out} ({done} fitted in {time.time() - t0:.0f} s)", file=sys.stderr)
-
-
-if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    main(limit=int(args[0]) if args else None, update="--update" in sys.argv)
