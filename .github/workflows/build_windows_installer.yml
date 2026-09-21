@@ -25,9 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache dependency bundle
+      # restore + explicit save (instead of actions/cache, which only saves when the
+      # whole job succeeds) so the ~1 h dependency bundle survives a failure later on
+      - name: Restore dependency bundle
         id: deps-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: deps\build\destdir
           key: deps-win64-${{ hashFiles('deps/**') }}
@@ -44,12 +46,21 @@ jobs:
           if errorlevel 1 exit /b 1
           rmdir /s /q dep_Boost-prefix dep_OCCT-prefix dep_OpenVDB-prefix dep_wxWidgets-prefix 2>nul
 
+      - name: Save dependency bundle
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: deps\build\destdir
+          key: deps-win64-${{ hashFiles('deps/**') }}
+
       - name: Build PrusaSlicer
         shell: cmd
         run: |
           mkdir build
           cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="%GITHUB_WORKSPACE%\deps\build\destdir\usr\local"
+          rem Release only: the deps carry no Debug libs (DEP_DEBUG=OFF) and FindOpenVDB on
+          rem MSVC insists on libopenvdbd.lib whenever "Debug" is among the configuration types
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_PREFIX_PATH="%GITHUB_WORKSPACE%\deps\build\destdir\usr\local"
           if errorlevel 1 exit /b 1
           cmake --build . --config Release --target PrusaSlicer_app_gui PrusaSlicer_app_console PrusaSlicer_app_gcodeviewer -- /m
           if errorlevel 1 exit /b 1

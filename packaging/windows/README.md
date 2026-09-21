@@ -39,7 +39,8 @@ cd ..\..
 
 rem PrusaSlicer
 mkdir build && cd build
-cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:\src\PrusaSlicer\deps\build\destdir\usr\local"
+rem Release only: the deps have no Debug libs, and FindOpenVDB on MSVC wants them otherwise
+cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_PREFIX_PATH="C:\src\PrusaSlicer\deps\build\destdir\usr\local"
 cmake --build . --config Release --target PrusaSlicer_app_gui PrusaSlicer_app_console PrusaSlicer_app_gcodeviewer -- /m
 cd ..
 
