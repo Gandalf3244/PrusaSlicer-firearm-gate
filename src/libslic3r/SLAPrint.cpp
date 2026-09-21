@@ -4,6 +4,7 @@
 ///|/ PrusaSlicer is released under the terms of the AGPLv3 or higher
 ///|/
 #include "SLAPrint.hpp"
+#include "FirearmGate.hpp"
 #include "SLAPrintSteps.hpp" // IWYU pragma: keep
 #include "CSGMesh/CSGMeshCopy.hpp"
 #include "CSGMesh/PerformCSGMeshBooleans.hpp"
@@ -650,6 +651,15 @@ std::string SLAPrint::output_filename(const std::string &filename_base) const
 
 std::string SLAPrint::validate(std::vector<std::string>*) const
 {
+    {
+        // Firearm-part gate: nothing identified as a printed-gun part may be sliced.
+        std::vector<const ModelObject*> printed;
+        for (const SLAPrintObject *po : m_objects)
+            printed.emplace_back(po->model_object());
+        if (std::string refusal = firearm_gate_validate(printed); ! refusal.empty())
+            return refusal;
+    }
+
     for(SLAPrintObject * po : m_objects) {
 
         const ModelObject *mo = po->model_object();

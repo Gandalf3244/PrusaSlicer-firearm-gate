@@ -1,0 +1,100 @@
+name: Windows installer (firearm gate)
+
+# Builds PrusaSlicer with the firearm gate on a Windows runner, assembles the
+# self-contained checker runtime, tests the gate on Windows, and produces
+# PrusaSlicer-FirearmGate-<version>-win64.exe as a workflow artifact.
+#
+# The dependency bundle takes ~2 h the first time and is cached on deps/**
+# afterwards, so later runs take ~1 h.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [firearm-gate]
+    tags: ["gate-v*"]
+
+env:
+  # CMake 4 refuses the old cmake_minimum_required in Eigen / OCCT / Boost of the deps bundle
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  VERSION: "2.9.6"
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache dependency bundle
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: deps\build\destdir
+          key: deps-win64-${{ hashFiles('deps/**') }}
+
+      - name: Build dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        shell: cmd
+        run: |
+          mkdir deps\build
+          cd deps\build
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DDEP_DEBUG=OFF
+          if errorlevel 1 exit /b 1
+          cmake --build . --config Release -- /m
+          if errorlevel 1 exit /b 1
+          rmdir /s /q dep_Boost-prefix dep_OCCT-prefix dep_OpenVDB-prefix dep_wxWidgets-prefix 2>nul
+
+      - name: Build PrusaSlicer
+        shell: cmd
+        run: |
+          mkdir build
+          cd build
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="%GITHUB_WORKSPACE%\deps\build\destdir\usr\local"
+          if errorlevel 1 exit /b 1
+          cmake --build . --config Release --target PrusaSlicer_app_gui PrusaSlicer_app_console PrusaSlicer_app_gcodeviewer -- /m
+          if errorlevel 1 exit /b 1
+          dir src\Release
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Assemble checker runtime
+        run: python packaging\windows\make_checker_runtime.py firearm-check checker-runtime
+
+      - name: Test checker runtime on Windows
+        shell: cmd
+        run: |
+          cd checker-runtime\app
+          ..\python\python.exe -m pipeline.check --json --units mm ..\..\firearm-check\tests\blocked_ejector_arm.stl
+          if not errorlevel 2 ( echo expected BLOCK & exit /b 1 )
+          ..\python\python.exe -m pipeline.check --json --units mm ..\..\firearm-check\tests\allowed_mini_knob.stl
+          if errorlevel 1 ( echo expected ALLOW & exit /b 1 )
+
+      - name: Stage and build installer
+        run: python packaging\windows\build_installer.py --build build\src\Release --source . --checker checker-runtime --out installer --version ${{ env.VERSION }}
+
+      - name: Test the gate end to end (staged PrusaSlicer + bundled checker)
+        shell: cmd
+        run: |
+          set PS=installer\stage\prusa-slicer-console.exe
+          %PS% --export-gcode --output blocked.gcode firearm-check\tests\blocked_ejector_arm.stl > blocked.txt 2>&1
+          if not errorlevel 1 ( echo expected refusal & type blocked.txt & exit /b 1 )
+          findstr /C:"Slicing refused" blocked.txt || ( type blocked.txt & exit /b 1 )
+          if exist blocked.gcode ( echo G-code was written for a blocked part & exit /b 1 )
+          %PS% --export-gcode --output allowed.gcode firearm-check\tests\allowed_mini_knob.stl > allowed.txt 2>&1
+          if errorlevel 1 ( type allowed.txt & exit /b 1 )
+          if not exist allowed.gcode ( echo no G-code for an allowed part & exit /b 1 )
+          type blocked.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PrusaSlicer-FirearmGate-${{ env.VERSION }}-win64
+          path: installer\PrusaSlicer-FirearmGate-*.exe
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/gate-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer\PrusaSlicer-FirearmGate-*.exe

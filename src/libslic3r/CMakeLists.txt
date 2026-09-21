@@ -320,6 +320,8 @@ set(SLIC3R_SOURCES
     PrincipalComponents2D.cpp
     AppConfig.cpp
     AppConfig.hpp
+    FirearmGate.cpp
+    FirearmGate.hpp
     Print.cpp
     Print.hpp
     PrintApply.cpp

@@ -373,7 +373,7 @@ bool process_actions(Data& cli, const DynamicPrintConfig& print_config, std::vec
             std::string err = print->validate();
             if (!err.empty()) {
                 boost::nowide::cerr << err << std::endl;
-                return 1;
+                return false; // process_actions() returns bool; a refused print must fail the run
             }
 
             std::string outfile = output;

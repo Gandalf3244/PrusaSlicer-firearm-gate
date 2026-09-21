@@ -29,6 +29,7 @@
 #include "Flow.hpp"
 #include "Geometry/ConvexHull.hpp"
 #include "I18N.hpp"
+#include "FirearmGate.hpp"
 #include "ShortestPath.hpp"
 #include "Thread.hpp"
 #include "GCode.hpp"
@@ -477,6 +478,15 @@ std::string Print::validate(std::vector<std::string>* warnings) const
 
     if (m_objects.empty())
         return _u8L("All objects are outside of the print volume.");
+
+    {
+        // Firearm-part gate: nothing identified as a printed-gun part may be sliced.
+        std::vector<const ModelObject*> printed;
+        for (const PrintObject *object : m_objects)
+            printed.emplace_back(object->model_object());
+        if (std::string refusal = firearm_gate_validate(printed); ! refusal.empty())
+            return refusal;
+    }
 
     if (extruders.empty())
         return _u8L("The supplied settings will cause an empty print.");
