@@ -26,16 +26,20 @@ jobs:
       - uses: actions/checkout@v4
 
       # restore + explicit save (instead of actions/cache, which only saves when the
-      # whole job succeeds) so the ~1 h dependency bundle survives a failure later on
+      # whole job succeeds) so the ~1 h dependency bundle survives a failure later on.
+      # The key must leave out deps/build/** - the save step runs after the build has
+      # filled it, so hashing it would never reproduce the key restore looked for;
+      # restore-keys reuses a bundle saved under any deps-win64-* key.
       - name: Restore dependency bundle
         id: deps-cache
         uses: actions/cache/restore@v4
         with:
           path: deps\build\destdir
-          key: deps-win64-${{ hashFiles('deps/**') }}
+          key: deps-win64-${{ hashFiles('deps/**', '!deps/build/**') }}
+          restore-keys: deps-win64-
 
       - name: Build dependencies
-        if: steps.deps-cache.outputs.cache-hit != 'true'
+        if: steps.deps-cache.outputs.cache-matched-key == ''
         shell: cmd
         run: |
           mkdir deps\build
@@ -47,11 +51,11 @@ jobs:
           rmdir /s /q dep_Boost-prefix dep_OCCT-prefix dep_OpenVDB-prefix dep_wxWidgets-prefix 2>nul
 
       - name: Save dependency bundle
-        if: steps.deps-cache.outputs.cache-hit != 'true'
+        if: steps.deps-cache.outputs.cache-matched-key == ''
         uses: actions/cache/save@v4
         with:
           path: deps\build\destdir
-          key: deps-win64-${{ hashFiles('deps/**') }}
+          key: deps-win64-${{ hashFiles('deps/**', '!deps/build/**') }}
 
       - name: Build PrusaSlicer
         shell: cmd
