@@ -31,6 +31,8 @@ def main():
     ap.add_argument("--no-vcredist", action="store_true")
     a = ap.parse_args()
 
+    # absolute: makensis compiles relative to the script's directory, not the caller's cwd
+    a.out = a.out.resolve()
     stage = a.out / "stage"
     if stage.exists():
         shutil.rmtree(stage)

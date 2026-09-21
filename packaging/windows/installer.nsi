@@ -1,6 +1,7 @@
 ; PrusaSlicer (firearm gate) - Windows installer.
 ;
-;   makensis -DSTAGE=<dir> -DVERSION=2.9.6 -DOUTFILE=PrusaSlicer-FirearmGate-2.9.6-win64.exe installer.nsi
+;   makensis -DSTAGE=<absolute dir> -DVERSION=2.9.6 -DOUTFILE=<absolute path>.exe installer.nsi
+;   (makensis resolves relative paths against this script's directory, so pass absolute ones)
 ;
 ; STAGE holds exactly what gets installed:
 ;   prusa-slicer.exe, prusa-slicer-console.exe, prusa-gcodeviewer.exe, *.dll   (the Windows build)
