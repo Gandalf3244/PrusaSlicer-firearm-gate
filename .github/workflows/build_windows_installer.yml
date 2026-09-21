@@ -56,6 +56,10 @@ jobs:
       - name: Build PrusaSlicer
         shell: cmd
         run: |
+          rem the "x64 Native Tools" environment: without it LIB / WindowsSdkDir are unset, so
+          rem find_library(Psapi) fails and the Win10 SDK STL-fixing service is not compiled in
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvars64.bat"
+          if errorlevel 1 exit /b 1
           mkdir build
           cd build
           rem Release only: the deps carry no Debug libs (DEP_DEBUG=OFF) and FindOpenVDB on
