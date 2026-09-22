@@ -100,18 +100,6 @@ PrusaSlicer looks for the checker at `$PRUSA_FIREARM_CHECK`, then
 or in `~/.local/bin`. Ubuntu-specific build notes are at the end of
 [doc/Firearm gate.md](doc/Firearm%20gate.md).
 
-## Quick check
-
-```bash
-cd firearm-check
-python -m pipeline.check tests/blocked_ejector_arm.stl   # DO NOT PRINT, exit 2
-python -m pipeline.check tests/allowed_mini_knob.stl     # OK TO PRINT, exit 0
-python -m pipeline.detect tests/blocked_ejector_arm.stl  # which fingerprints fired, and why
-```
-
-With a built binary, `prusa-slicer --export-gcode -o x.gcode firearm-check/tests/blocked_ejector_arm.stl`
-must refuse and exit 1; the knob must slice.
-
 ## Layout of the fork's additions
 
 | path | what |
