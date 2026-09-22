@@ -13,6 +13,10 @@ on:
     branches: [firearm-gate]
     tags: ["gate-v*"]
 
+# contents: write is needed to create the release for a gate-v* tag
+permissions:
+  contents: write
+
 env:
   # CMake 4 refuses the old cmake_minimum_required in Eigen / OCCT / Boost of the deps bundle
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
