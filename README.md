@@ -47,9 +47,11 @@ Measured on the reference library: 491/491 parts identified, 0 false positives o
 
 ### Windows installer
 
-Download **`PrusaSlicer-FirearmGate-2.9.6-win64.exe`** (about 130 MB) from the
-[latest release](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/latest)
-and run it. Windows SmartScreen will warn that the installer is unsigned: choose
+**Download: [PrusaSlicer-FirearmGate-2.9.6-win64.exe](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/download/gate-v2.9.6/PrusaSlicer-FirearmGate-2.9.6-win64.exe)**
+(130 MB, from the [gate-v2.9.6 release](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/tag/gate-v2.9.6);
+newer versions appear under [releases](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases)).
+
+Run it. Windows SmartScreen will warn that the installer is unsigned: choose
 "More info" → "Run anyway". It installs, for 64-bit Windows 10 / 11:
 
 - PrusaSlicer 2.9.6 with the gate (`prusa-slicer.exe`, `prusa-slicer-console.exe`,
@@ -61,19 +63,14 @@ and run it. Windows SmartScreen will warn that the installer is unsigned: choose
 
 It sits next to a regular PrusaSlicer installation and shares its configuration
 (printers, filaments, profiles), so a plate that slices in one slices in the
-other, unless a firearm part is on it.
+other, unless a firearm part is on it. The installer contains no firearm models:
+the checker ships as code plus two JSON files of dimensional fingerprints (hole
+diameters, spacings and angles), not part geometry.
 
-To verify the gate after installing, download the two test parts from
-[firearm-check/tests/](firearm-check/tests/) and, in a command prompt:
-
-```bat
-cd "C:\Program Files\PrusaSlicer-FirearmGate"
-prusa-slicer-console.exe --export-gcode --output x.gcode %USERPROFILE%\Downloads\blocked_ejector_arm.stl
-```
-
-prints `Slicing refused: the plate contains a firearm part.` and exits 1; the same
-with `allowed_mini_knob.stl` writes `x.gcode`. In the GUI, opening
-`blocked_ejector_arm.stl` disables Slice / Export with the same message.
+Each installer is tested before it is published: the workflow runs the staged
+`prusa-slicer-console.exe` on a known gun part (refused, exit 1, no G-code) and on
+a plain part (sliced). The two parts used for that live only in this repository,
+under `firearm-check/tests/`, for the build and for developers.
 
 The installer is built by the
 [Windows installer workflow](.github/workflows/build_windows_installer.yml): every
