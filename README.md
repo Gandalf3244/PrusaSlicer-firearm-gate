@@ -1,8 +1,5 @@
 # PrusaSlicer with a firearm-part gate
 
-[![A video demonstration](https://jorgenkh.no)](https://youtu.be/ri56BqrvPNU)
-
-
 A fork of [PrusaSlicer](https://github.com/prusa3d/PrusaSlicer) 2.9.6 that
 refuses to slice anything it recognises as a printed-gun part, and tells the
 user what was recognised. Everything else about PrusaSlicer is unchanged.
@@ -21,6 +18,12 @@ Remove it from the plate to continue.
 The GUI disables Slice / Export with that message; `prusa-slicer --export-gcode`
 prints it to stderr, writes no G-code and exits 1. The gate fails closed: if the
 checker is missing or broken, slicing is disabled with a message saying so.
+
+## Demo
+
+[![Video: PrusaSlicer firearm-part gate demonstration](https://img.youtube.com/vi/ri56BqrvPNU/maxresdefault.jpg)](https://youtu.be/ri56BqrvPNU)
+
+*Click to watch on YouTube (GitHub cannot embed a YouTube player).*
 
 ## How it works
 
