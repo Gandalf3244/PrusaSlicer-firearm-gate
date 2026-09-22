@@ -1,8 +1,7 @@
 # PrusaSlicer with a firearm-part gate
 
+[![A video demonstration](https://youtube.com)](https://youtu.be/ri56BqrvPNU)
 
-https://github.com/user-attachments/assets/8b45dcf0-bbfd-4aaf-8f4c-9c43a721ce90
-A video demonstration
 
 A fork of [PrusaSlicer](https://github.com/prusa3d/PrusaSlicer) 2.9.6 that
 refuses to slice anything it recognises as a printed-gun part, and tells the
