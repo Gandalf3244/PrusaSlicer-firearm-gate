@@ -45,13 +45,42 @@ Measured on the reference library: 491/491 parts identified, 0 false positives o
 
 ## Getting it
 
-**Windows installer** – `PrusaSlicer-FirearmGate-<version>-win64.exe` bundles
-PrusaSlicer, the checker with its own private Python runtime and the VC++ runtime;
-nothing else is needed. It is built by the
-[Windows installer workflow](.github/workflows/build_windows_installer.yml) on every
-push to `firearm-gate` (download it from the run's artifacts) and attached to a
-GitHub release for tags `gate-v*`. Building it yourself, with or without GitHub
-Actions, is described in [packaging/windows/README.md](packaging/windows/README.md).
+### Windows installer
+
+Download **`PrusaSlicer-FirearmGate-2.9.6-win64.exe`** (about 130 MB) from the
+[latest release](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/latest)
+and run it. Windows SmartScreen will warn that the installer is unsigned: choose
+"More info" → "Run anyway". It installs, for 64-bit Windows 10 / 11:
+
+- PrusaSlicer 2.9.6 with the gate (`prusa-slicer.exe`, `prusa-slicer-console.exe`,
+  `prusa-gcodeviewer.exe`) under `C:\Program Files\PrusaSlicer-FirearmGate\`, with
+  Start-menu and desktop shortcuts and an uninstaller;
+- the checker with its own private Python runtime in `resources\firearm-check\`
+  (nothing to install separately: no Python, no packages);
+- the Visual C++ runtime, quietly, if it is missing.
+
+It sits next to a regular PrusaSlicer installation and shares its configuration
+(printers, filaments, profiles), so a plate that slices in one slices in the
+other, unless a firearm part is on it.
+
+To verify the gate after installing, download the two test parts from
+[firearm-check/tests/](firearm-check/tests/) and, in a command prompt:
+
+```bat
+cd "C:\Program Files\PrusaSlicer-FirearmGate"
+prusa-slicer-console.exe --export-gcode --output x.gcode %USERPROFILE%\Downloads\blocked_ejector_arm.stl
+```
+
+prints `Slicing refused: the plate contains a firearm part.` and exits 1; the same
+with `allowed_mini_knob.stl` writes `x.gcode`. In the GUI, opening
+`blocked_ejector_arm.stl` disables Slice / Export with the same message.
+
+The installer is built by the
+[Windows installer workflow](.github/workflows/build_windows_installer.yml): every
+push to `firearm-gate` produces it as a workflow artifact (kept 90 days, GitHub
+sign-in required to download), and a tag `gate-v<version>` attaches it to a GitHub
+release. Building it yourself is described in
+[packaging/windows/README.md](packaging/windows/README.md).
 
 **Linux / macOS from source** – build PrusaSlicer as usual
 ([Linux](doc/How%20to%20build%20-%20Linux%20et%20al.md),
