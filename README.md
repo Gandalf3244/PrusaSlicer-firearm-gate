@@ -1,6 +1,6 @@
 # PrusaSlicer with a firearm-part gate
 
-[![A video demonstration](https://youtube.com)](https://youtu.be/ri56BqrvPNU)
+[![A video demonstration](https://jorgenkh.no)](https://youtu.be/ri56BqrvPNU)
 
 
 A fork of [PrusaSlicer](https://github.com/prusa3d/PrusaSlicer) 2.9.6 that
