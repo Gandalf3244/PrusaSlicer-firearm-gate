@@ -11,7 +11,8 @@ to itself.
 Push this repository to GitHub (the `firearm-gate` branch) and run the
 "Windows installer (firearm gate)" workflow (Actions tab → Run workflow), or push a
 tag `gate-v2.9.6` to get it attached to a GitHub release. The first run takes
-~3 h (the dependency bundle), later runs ~1 h thanks to the cache. The workflow
+~1 h 45 (the dependency bundle), later runs ~40 min thanks to the cache;
+pushes that only change documentation do not build. The workflow
 also runs the checker and the gated `prusa-slicer-console.exe` on Windows and
 fails if a known gun part is not refused or a plain part does not slice.
 

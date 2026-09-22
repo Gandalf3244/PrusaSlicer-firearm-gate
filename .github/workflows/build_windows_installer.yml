@@ -4,14 +4,19 @@ name: Windows installer (firearm gate)
 # self-contained checker runtime, tests the gate on Windows, and produces
 # PrusaSlicer-FirearmGate-<version>-win64.exe as a workflow artifact.
 #
-# The dependency bundle takes ~2 h the first time and is cached on deps/**
-# afterwards, so later runs take ~1 h.
+# The dependency bundle takes ~1 h the first time and is cached afterwards, so a
+# run is ~40 min (the PrusaSlicer compile). Path filters do not apply to tag
+# pushes, so a gate-v* tag always builds and publishes its release.
 
 on:
   workflow_dispatch:
   push:
     branches: [firearm-gate]
     tags: ["gate-v*"]
+    # documentation-only pushes do not need a 40-minute build
+    paths-ignore:
+      - "**.md"
+      - "doc/**"
 
 # contents: write is needed to create the release for a gate-v* tag
 permissions:
