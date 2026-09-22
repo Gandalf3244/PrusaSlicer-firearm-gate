@@ -21,13 +21,9 @@ checker is missing or broken, slicing is disabled with a message saying so.
 
 ## Demo
 
-[![Video: PrusaSlicer firearm-part gate demonstration](https://img.youtube.com/vi/ri56BqrvPNU/maxresdefault.jpg)](https://youtu.be/ri56BqrvPNU)
-
-
 https://github.com/user-attachments/assets/7816469c-1ee4-42ed-b2d4-52e3a621982c
 
-
-*Click to watch on YouTube (GitHub cannot embed a YouTube player).*
+Also on YouTube: [PrusaSlicer firearm-part gate demonstration](https://youtu.be/ri56BqrvPNU).
 
 ## How it works
 
