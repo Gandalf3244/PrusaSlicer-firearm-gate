@@ -34,8 +34,8 @@ printed scale and handed to the checker, `firearm-check --json --units mm <stl>`
 Verdicts are cached by geometry and scale, so moving or rotating an object is free.
 
 The checker ([firearm-check/](firearm-check/)) is a small Python pipeline: it fits
-planes, cylinders and cones to the mesh, and matches the resulting constellation of
-holes and bosses against 1065 fingerprints of 552 reference parts plus per-platform
+planes, cylinders and cones to the mesh, and matches the resulting constellation
+of holes and bosses against 1065 fingerprints of 552 reference parts plus per-platform
 patterns. Any of four kinds of evidence blocks a print:
 
 | level | meaning |
@@ -54,7 +54,7 @@ identified, 0 false positives on 511 non-gun files. Details, the JSON contract a
 
 ### Windows installer
 
-**Download: [PrusaSlicer-FirearmGate-2.9.6-win64.exe]([https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/latest/download/PrusaSlicer-FirearmGate-2.9.6-win64.exe](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/download/gate-v2.9.6-2/PrusaSlicer-FirearmGate-2.9.6-win64.exe))**
+**Download: [PrusaSlicer-FirearmGate-2.9.6-win64.exe](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/download/gate-v2.9.6-2/PrusaSlicer-FirearmGate-2.9.6-win64.exe)**
 (130 MB, from the [latest release](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/latest);
 all versions are under [releases](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases)).
 
@@ -121,8 +121,8 @@ or in `~/.local/bin`. Ubuntu-specific build notes are at the end of
 | `doc/Firearm gate.md` | behaviour, configuration, latency, build notes |
 
 The reference library, the fingerprint-mining and curation tools that produce the
-two JSON files, and the accuracy reports are not in this repository; they live in the
-development project ("Gun 3d model detection" on Google Drive, `PIPELINE_STATUS.md`
+two JSON files, and the accuracy reports are not in this repository; they live in
+the development project ("Gun 3d model detection" on Google Drive, `PIPELINE_STATUS.md`
 there). Update the JSON files from that project when the library changes.
 
 ## License
