@@ -2725,7 +2725,7 @@ wxMenu* GUI_App::get_config_menu(MainFrame* main_frame)
         local_menu->Append(config_id_base + ConfigMenuSnapshots, _L("&Configuration Snapshots") + dots, _L("Inspect / activate configuration snapshots"));
         local_menu->Append(config_id_base + ConfigMenuTakeSnapshot, _L("Take Configuration &Snapshot"), _L("Capture a configuration snapshot"));
         local_menu->Append(config_id_base + ConfigMenuUpdateConf, _L("Check for Configuration Updates"), _L("Check for configuration updates"));
-        local_menu->Append(config_id_base + ConfigMenuUpdateApp, _L("Check for Application Updates"), _L("Check for new version of application"));
+        // Firearm gate: no "Check for Application Updates" - it downloads and runs the stock installer.
 #if defined(__linux__) && defined(SLIC3R_DESKTOP_INTEGRATION) 
         //if (DesktopIntegrationDialog::integration_possible())
         local_menu->Append(config_id_base + ConfigMenuDesktopIntegration, _L("Desktop Integration"), _L("Desktop Integration"));    
@@ -3827,6 +3827,12 @@ void GUI_App::app_updater(bool from_user)
 
 void GUI_App::app_version_check(bool from_user)
 {
+    // Firearm gate: the application updater is disabled. It offers the stock PrusaSlicer
+    // installer from prusa3d.com, which would replace or sit next to this build and
+    // remove the gate. Updates come from the firearm-gate installer only.
+    BOOST_LOG_TRIVIAL(info) << "Application update check disabled in the firearm-gate build.";
+    return;
+
     if (from_user) {
         if (m_app_updater->get_download_ongoing()) {
             MessageDialog msgdlg(nullptr, _L("Downloading of the new version is in progress. Do you want to continue?"), _L("Notice"), wxYES_NO);

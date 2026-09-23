@@ -53,9 +53,9 @@ Measured on the reference library: 491/491 parts identified, 0 false positives o
 
 ### Windows installer
 
-**Download: [PrusaSlicer-FirearmGate-2.9.6-win64.exe](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/download/gate-v2.9.6/PrusaSlicer-FirearmGate-2.9.6-win64.exe)**
-(130 MB, from the [gate-v2.9.6 release](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/tag/gate-v2.9.6);
-newer versions appear under [releases](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases)).
+**Download: [PrusaSlicer-FirearmGate-2.9.6-win64.exe](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/latest/download/PrusaSlicer-FirearmGate-2.9.6-win64.exe)**
+(130 MB, from the [latest release](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/latest);
+all versions are under [releases](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases)).
 
 Run it. Windows SmartScreen will warn that the installer is unsigned: choose
 "More info" → "Run anyway". It installs, for 64-bit Windows 10 / 11:
@@ -67,16 +67,20 @@ Run it. Windows SmartScreen will warn that the installer is unsigned: choose
   (nothing to install separately: no Python, no packages);
 - the Visual C++ runtime, quietly, if it is missing.
 
-It sits next to a regular PrusaSlicer installation and shares its configuration
-(printers, filaments, profiles), so a plate that slices in one slices in the
-other, unless a firearm part is on it. The installer contains no firearm models:
+It replaces a regular PrusaSlicer installation: a stock PrusaSlicer would slice
+anything, so the installer uninstalls it first (and stops if it cannot) and opens
+.3mf / .stl files in the gated build. The configuration (printers, filaments,
+profiles) is kept and shared, so a plate that sliced before still slices, unless a
+firearm part is on it. The gated build has no "Check for Application Updates",
+which would download the stock installer; updates come from this page. The installer contains no firearm models:
 the checker ships as code plus two JSON files of dimensional fingerprints (hole
 diameters, spacings and angles), not part geometry.
 
 Each installer is tested before it is published: the workflow runs the staged
 `prusa-slicer-console.exe` on a known gun part (refused, exit 1, no G-code) and on
-a plain part (sliced). The two parts used for that live only in this repository,
-under `firearm-check/tests/`, for the build and for developers.
+a plain part (sliced), then installs it over fake stock PrusaSlicer installs and
+checks they are removed. The gun part comes from a repository secret; this
+repository contains no firearm models.
 
 The installer is built by the
 [Windows installer workflow](.github/workflows/build_windows_installer.yml): every

@@ -6,6 +6,17 @@ Visual C++ runtime, and adds Start-menu / desktop shortcuts. The user needs
 nothing else; PrusaSlicer finds the checker at `resources\firearm-check\` next
 to itself.
 
+A stock PrusaSlicer on the same machine would slice anything, so the installer
+first uninstalls every "PrusaSlicer" entry in Add/Remove Programs (silently when
+the uninstaller allows it) and deletes leftover copies in `Program Files\Prusa3D\PrusaSlicer`,
+`Program Files\PrusaSlicer` and `%LOCALAPPDATA%\Programs\PrusaSlicer`. If one cannot be
+removed, it stops without installing (exit code 3). It also points PrusaSlicer's
+.3mf/.stl file types at the gated build, and the gated build has no "Check for
+Application Updates" (that downloads the stock installer). This does not stop anyone
+with admin rights from installing stock PrusaSlicer again afterwards; on a managed
+machine, block it with an application-control policy (AppLocker / App Control for
+Business: deny publisher "Prusa Research", which signs the stock build).
+
 ## Option A - GitHub Actions builds it (no Windows machine needed)
 
 Push this repository to GitHub (the `firearm-gate` branch) and run the
@@ -14,7 +25,8 @@ tag `gate-v2.9.6` to get it attached to a GitHub release. The first run takes
 ~1 h 45 (the dependency bundle), later runs ~40 min thanks to the cache;
 pushes that only change documentation do not build. The workflow
 also runs the checker and the gated `prusa-slicer-console.exe` on Windows and
-fails if a known gun part is not refused or a plain part does not slice.
+fails if a known gun part is not refused or a plain part does not slice
+(the gun part comes from the `GATE_TEST_BLOCKED_STL` secret, base64 of the STL).
 
 Download the artifact `PrusaSlicer-FirearmGate-<version>-win64` from the run.
 
@@ -55,17 +67,18 @@ python packaging\windows\build_installer.py --build build\src\Release --source .
 Quick check before shipping:
 
 ```bat
-installer\stage\prusa-slicer-console.exe --export-gcode --output x.gcode firearm-check\tests\blocked_ejector_arm.stl
+installer\stage\prusa-slicer-console.exe --export-gcode --output x.gcode <a gun part from the reference library>.stl
 ```
 
 must print "Slicing refused: the plate contains a firearm part" and exit 1;
-the same with `allowed_mini_knob.stl` must write `x.gcode`.
+the same with any ordinary part must write `x.gcode`. (The repository ships no
+firearm models; CI takes its blocked test part from the `GATE_TEST_BLOCKED_STL` secret.)
 
 ## What the pieces are
 
 | path | role |
 |---|---|
-| `firearm-check/` | the checker: `pipeline/`, `data/fingerprints.json`, `data/family_patterns.json`, `scripts/sldprt2stl.py`, two test parts |
+| `firearm-check/` | the checker: `pipeline/`, `data/fingerprints.json`, `data/family_patterns.json`, `scripts/sldprt2stl.py` |
 | `make_checker_runtime.py` | official embeddable CPython + pinned Windows wheels (numpy, scipy, trimesh) + the checker → `python\` and `app\` |
 | `build_installer.py` | stages exe/dll + `resources\` + the runtime + `vc_redist.x64.exe`, runs `makensis` |
 | `installer.nsi` | NSIS script: install dir, shortcuts, uninstaller, quiet VC++ runtime install |

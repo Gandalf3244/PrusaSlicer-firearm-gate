@@ -90,14 +90,33 @@ jobs:
       - name: Assemble checker runtime
         run: python packaging\windows\make_checker_runtime.py firearm-check checker-runtime
 
+      # The repository ships no firearm models. The allowed part is a generated box; the
+      # blocked part comes from the GATE_TEST_BLOCKED_STL secret (base64 of an STL the checker
+      # must refuse, e.g. base64 -w0 blocked_ejector_arm.stl). Without the secret the
+      # gun-part checks are skipped with a warning.
+      - name: Prepare test parts
+        shell: bash
+        env:
+          BLOCKED_B64: ${{ secrets.GATE_TEST_BLOCKED_STL }}
+        run: |
+          mkdir -p testparts
+          checker-runtime/python/python.exe -c "import trimesh; trimesh.creation.box((30, 20, 10)).export('testparts/allowed_box.stl')"
+          if [ -n "$BLOCKED_B64" ]; then
+            printf '%s' "$BLOCKED_B64" | base64 -d > testparts/blocked.stl
+          else
+            echo "::warning::secret GATE_TEST_BLOCKED_STL is not set - the gun-part refusal is not tested"
+          fi
+
       - name: Test checker runtime on Windows
         shell: cmd
         run: |
           cd checker-runtime\app
-          ..\python\python.exe -m pipeline.check --json --units mm ..\..\firearm-check\tests\blocked_ejector_arm.stl
-          if not errorlevel 2 ( echo expected BLOCK & exit /b 1 )
-          ..\python\python.exe -m pipeline.check --json --units mm ..\..\firearm-check\tests\allowed_mini_knob.stl
+          ..\python\python.exe -m pipeline.check --json --units mm ..\..\testparts\allowed_box.stl
           if errorlevel 1 ( echo expected ALLOW & exit /b 1 )
+          if not exist ..\..\testparts\blocked.stl exit /b 0
+          ..\python\python.exe -m pipeline.check --json --units mm ..\..\testparts\blocked.stl
+          if not errorlevel 2 ( echo expected BLOCK & exit /b 1 )
+          exit /b 0
 
       - name: Stage and build installer
         run: python packaging\windows\build_installer.py --build build\src\Release --source . --checker checker-runtime --out installer --version ${{ env.VERSION }}
@@ -114,14 +133,53 @@ jobs:
           python -c "import ctypes,os,sys; p=os.path.abspath(r'installer\stage\PrusaSlicer.dll'); os.add_dll_directory(os.path.dirname(p)); ctypes.WinDLL(p); print('ctypes: PrusaSlicer.dll loads')" || echo ctypes: PrusaSlicer.dll does NOT load
           build\src\Release\prusa-slicer-console.exe --help > help.txt 2>&1
           echo build-dir exe exit code %errorlevel% & type help.txt | findstr /N /C:"" | findstr /B "[1-5]:"
-          %PS% --export-gcode --output blocked.gcode firearm-check\tests\blocked_ejector_arm.stl > blocked.txt 2>&1
+          %PS% --export-gcode --output allowed.gcode testparts\allowed_box.stl > allowed.txt 2>&1
+          if errorlevel 1 ( type allowed.txt & exit /b 1 )
+          if not exist allowed.gcode ( echo no G-code for an allowed part & exit /b 1 )
+          if not exist testparts\blocked.stl exit /b 0
+          %PS% --export-gcode --output blocked.gcode testparts\blocked.stl > blocked.txt 2>&1
           if not errorlevel 1 ( echo expected refusal & type blocked.txt & exit /b 1 )
           findstr /C:"Slicing refused" blocked.txt || ( type blocked.txt & exit /b 1 )
           if exist blocked.gcode ( echo G-code was written for a blocked part & exit /b 1 )
-          %PS% --export-gcode --output allowed.gcode firearm-check\tests\allowed_mini_knob.stl > allowed.txt 2>&1
-          if errorlevel 1 ( type allowed.txt & exit /b 1 )
-          if not exist allowed.gcode ( echo no G-code for an allowed part & exit /b 1 )
           type blocked.txt
+          exit /b 0
+
+      # A stock PrusaSlicer left next to the gated one would slice anything, so the installer
+      # must remove it. Fake stock installs: one registered in Add/Remove Programs whose
+      # uninstaller fails (the installer must refuse), then one that uninstalls, plus an
+      # unregistered copy in the standard folder.
+      - name: Test the installer removes a stock PrusaSlicer
+        shell: cmd
+        run: |
+          set SETUP=installer\PrusaSlicer-FirearmGate-%VERSION%-win64.exe
+          set KEY=HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\PrusaSlicerStockTest
+          set PORTABLE=C:\Program Files\Prusa3D\PrusaSlicer
+          set GATED=C:\Program Files\PrusaSlicer-FirearmGate
+          mkdir C:\StockPrusa "%PORTABLE%"
+          copy installer\stage\prusa-slicer*.exe C:\StockPrusa\
+          copy installer\stage\prusa-slicer*.exe "%PORTABLE%\"
+          reg add %KEY% /reg:64 /f /v DisplayName /d "PrusaSlicer 2.9.4"
+          reg add %KEY% /reg:64 /f /v InstallLocation /d C:\StockPrusa
+          reg add %KEY% /reg:64 /f /v UninstallString /d "cmd.exe /c exit 1"
+
+          start /wait "" %SETUP% /S
+          if not errorlevel 1 ( echo installed although the stock PrusaSlicer could not be removed & exit /b 1 )
+          if exist "%GATED%\prusa-slicer.exe" ( echo installed although the stock PrusaSlicer could not be removed & exit /b 1 )
+
+          reg add %KEY% /reg:64 /f /v QuietUninstallString /d "reg.exe delete %KEY% /reg:64 /f"
+          start /wait "" %SETUP% /S
+          if errorlevel 1 ( echo installer failed & exit /b 1 )
+          reg query %KEY% /reg:64 && ( echo stock uninstall entry still there & exit /b 1 )
+          if exist C:\StockPrusa\prusa-slicer.exe ( echo registered stock copy still there & exit /b 1 )
+          if exist "%PORTABLE%\prusa-slicer.exe" ( echo unregistered stock copy still there & exit /b 1 )
+          if not exist "%GATED%\prusa-slicer-console.exe" ( echo gated PrusaSlicer not installed & exit /b 1 )
+          reg query HKLM\Software\Classes\Prusa.Slicer.1\Shell\Open\Command | findstr /C:"PrusaSlicer-FirearmGate" || ( echo .3mf/.stl not associated & exit /b 1 )
+
+          if not exist testparts\blocked.stl exit /b 0
+          "%GATED%\prusa-slicer-console.exe" --export-gcode --output installed.gcode testparts\blocked.stl > installed.txt 2>&1
+          if not errorlevel 1 ( echo installed copy did not refuse & type installed.txt & exit /b 1 )
+          findstr /C:"Slicing refused" installed.txt || ( type installed.txt & exit /b 1 )
+          exit /b 0
 
       # keep the installer even when the headless end-to-end test fails, so it can be tried on a real PC
       - uses: actions/upload-artifact@v4
