@@ -161,15 +161,67 @@ def classify_diameter(d_mm: float, kind: str, length_mm: float = 0.0, area_mm2: 
     return "specific", ""
 
 
-def bore_evidence(sig: dict) -> list[dict]:
-    """Part-type-level evidence independent of any reference design: a long
-    hole at a printed-gun bullet diameter (>= 25 mm and 4 diameters, not a
-    metric rod size) is a barrel bore whatever the design around it."""
+BORE_MIN_SPAN = 0.84     # bore + coaxial chamber / part length along the bore axis
+
+
+def _coaxial(h: dict, e: dict, ang_max: float = 2.0, dist_max: float = 0.5) -> bool:
+    a, b = np.asarray(h["a"], float), np.asarray(e["a"], float)
+    if abs(float(a @ b)) < np.cos(np.radians(ang_max)):
+        return False
+    d = np.asarray(e["c"], float) - np.asarray(h["c"], float)
+    return float(np.linalg.norm(d - (d @ a) * a)) <= dist_max
+
+
+def axial_span(h: dict, holes: list[dict], mesh) -> float:
+    """Length covered by hole `h` and the holes coaxial with it (chamber,
+    throat), as a fraction of the part's length along the hole axis."""
+    a, c = np.asarray(h["a"], float), np.asarray(h["c"], float)
+    t = (np.asarray(mesh.vertices) - c) @ a
+    extent = float(t.max() - t.min())
+    if extent <= 0:
+        return 0.0
+    ivs = sorted((float((np.asarray(o["c"], float) - c) @ a) - o["L"] / 2,
+                  float((np.asarray(o["c"], float) - c) @ a) + o["L"] / 2)
+                 for o in [h] + [o for o in holes if o is not h and _coaxial(h, o)])
+    span, lo, hi = 0.0, *ivs[0]
+    for a0, b0 in ivs[1:]:
+        if a0 > hi:
+            span += hi - lo; lo, hi = a0, b0
+        else:
+            hi = max(hi, b0)
+    return (span + hi - lo) / extent
+
+
+def bore_candidates(sig: dict) -> list[dict]:
+    """Long holes (>= 25 mm and 4 diameters, not a metric rod size) at a
+    printed-gun bullet diameter - the diameter test of bore_evidence alone."""
     out = []
     for h in sig.get("holes", []):
         if h.get("cov", 0) < 0.9:
             continue
         cls, note = classify_diameter(h["d"], "hole", h.get("L", 0.0), h.get("area"))
         if cls == "bore":
-            out.append({"caliber": note, "d": h["d"], "L": h["L"]})
+            out.append({"caliber": note, "d": h["d"], "L": h["L"], "hole": h})
+    return out
+
+
+def bore_evidence(sig: dict, mesh=None) -> list[dict]:
+    """Part-type-level evidence independent of any reference design: a barrel
+    bore, whatever the design around it. Two features, both always present on
+    a barrel: a long hole at a printed-gun bullet diameter (bore_candidates),
+    and that hole - with its coaxial chamber - running the whole length of the
+    part along its axis (>= BORE_MIN_SPAN). Every library barrel the diameter
+    test finds spans >= 0.86 of its length; a pistol grip's screw hole, an FCG
+    pin bore or a stock's buffer channel is a long hole of bullet diameter
+    that ends inside the part (0.2 - 0.8), and is no longer reported.
+    `mesh` is the part the signature was fitted on (same coordinates); the
+    span cannot be measured without it, so no bore is reported then."""
+    if mesh is None:
+        return []
+    holes = sig.get("holes", [])
+    out = []
+    for b in bore_candidates(sig):
+        span = axial_span(b.pop("hole"), holes, mesh)
+        if span >= BORE_MIN_SPAN:
+            out.append({**b, "span": round(span, 3)})
     return out

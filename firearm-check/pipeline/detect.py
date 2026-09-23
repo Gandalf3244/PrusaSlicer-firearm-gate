@@ -118,7 +118,7 @@ def main():
     else:
         extra = []
     print(f"  platform evidence (family patterns present): {fam_hits or 'none'}")
-    bores = bore_evidence(sig)
+    bores = bore_evidence(sig, load_mesh(a.stl))
     if bores:
         print("  bore evidence: " + "; ".join(f"{b['caliber']} (Ø{b['d']:.2f} x {b['L']:.0f} mm)" for b in bores))
     print(f"{a.stl}\n  scale x{sig['scale']}  obb {sig['obb']} mm  "

@@ -16,7 +16,8 @@ Decision (every rule measured on the negative set, 0/432 firings each):
               (strong fingerprint, or two disjoint ones of a weak part)
     lineage   the same at LOOSE: a derivative / re-export of a known design
     platform  family patterns present (e.g. the AR-15 fire-control pocket)
-    bore      a long hole at a printed-gun bullet diameter (a barrel)
+    bore      a long hole at a printed-gun bullet diameter that runs the whole
+              length of the part (a barrel; calibers.bore_evidence)
 Any of them -> BLOCK. Otherwise ALLOW.
 """
 from __future__ import annotations
@@ -34,7 +35,7 @@ from .calibers import bore_evidence
 from .detect import detect, load_fingerprints, signature_of_mesh
 from .families import classify_family, load_family_patterns
 from .pool import trim_after
-from .roles import role_of
+from .roles import is_grip, role_of
 from .units import UNIT_SCALE, infer_scale, prepare_mesh
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -91,9 +92,10 @@ class Library:
         self.patterns = load_family_patterns()
         self.n_parts = len({fp.source for fp in self.fps})
 
-    def evidence_for(self, sig: dict, body: str, bores: bool = True) -> list[Evidence]:
+    def evidence_for(self, sig: dict, body: str, bores: bool = True, mesh=None) -> list[Evidence]:
         """`bores=False` at a guessed unit scale: a bore is a single dimension,
-        and a PCB DIN clip's Ø1.9 x 9.6 mm hole read at x10 is a "12-gauge barrel"."""
+        and a PCB DIN clip's Ø1.9 x 9.6 mm hole read at x10 is a "12-gauge barrel".
+        `mesh` = the mesh `sig` was fitted on (the bore must span it)."""
         out: list[Evidence] = []
         tight = detect(sig, self.fps, loose=False)
         seen = {h["reference"] for h in tight}
@@ -103,11 +105,15 @@ class Library:
                 ref = h["reference"]; parts = ref.split("/")
                 model = parts[1] if len(parts) > 1 else ""
                 role = role_of(parts[-1], model)
+                # grips count only as an exact copy: design level with every
+                # fingerprint firing (many harmless handles share a grip's holes)
+                if is_grip(parts[-1], model) and (level != "design" or h["fired"] < h["n_fingerprints"]):
+                    continue
                 out.append(Evidence(level, f"{role}: {parts[-1]} ({model}), {h['fired']}/{h['n_fingerprints']} fingerprints",
                                     ref, model, role, h["confidence"], body))
         for fam, n in classify_family(sig, self.patterns).items():
             out.append(Evidence("platform", f"{fam} platform pattern x{n}", "", "", "", 1.0, body))
-        for b in bore_evidence(sig) if bores else []:
+        for b in bore_evidence(sig, mesh) if bores else []:
             out.append(Evidence("bore", f"barrel bore {b['caliber']} (Ø{b['d']:.2f} x {b['L']:.0f} mm)", "", "", "barrel", 1.0, body))
         return out
 
@@ -132,7 +138,7 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
     s = infer_scale(raw) if scale is None else scale
     whole = prepare_mesh(raw.copy(), scale=s)
     sig = signature_of_mesh(whole, name, s)
-    ev = lib.evidence_for(sig, "whole")
+    ev = lib.evidence_for(sig, "whole", mesh=whole)
     if not ev and scale is None:
         for alt in alternative_scales(raw, s):
             m = prepare_mesh(raw.copy(), scale=alt)
@@ -147,7 +153,7 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
             raw_b = b.copy(); raw_b.apply_scale(1.0 / s)
             sb = infer_scale(raw_b) if scale is None else scale
             mb = prepare_mesh(raw_b, scale=sb)
-            ev += lib.evidence_for(signature_of_mesh(mb, f"{name}#body{i}", sb), f"body {i}")
+            ev += lib.evidence_for(signature_of_mesh(mb, f"{name}#body{i}", sb), f"body {i}", mesh=mb)
     # one line per distinct finding
     uniq: dict[tuple, Evidence] = {}
     for e in ev:

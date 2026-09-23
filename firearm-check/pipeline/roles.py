@@ -32,3 +32,13 @@ def role_of(part: str, model: str = "") -> str:
         if rx.search(text):
             return r
     return "other"
+
+
+_GRIP = re.compile(r"grip", re.I)
+_GRIP_FRAME = re.compile(r"grip_?frame", re.I)
+
+
+def is_grip(part: str, model: str = "") -> bool:
+    """A grip (pistol grip, fore grip, grip panel): blocked only on an exact match."""
+    text = part.replace("-", "_").replace(" ", "_")
+    return role_of(part, model) == "stock/grip/handguard" and bool(_GRIP.search(text)) and not _GRIP_FRAME.search(text)

@@ -2,81 +2,171 @@
 "1911": [
 {
 "family": "1911",
-"source": "Pistols/1911_STI_Full_Frame_and_Handle/STL/Frame_Single_Tactical_5Zoll.stl",
+"source": "Pistols/1911-A1_Frame/STL/1911A1.stl",
 "size": 3,
 "holes": [
 {
-"d": 5.105,
-"L": 4.79,
-"cov": 1.0,
-"area": 76.8,
-"rms": 0.0,
+"d": 3.175,
+"L": 7.94,
+"cov": 0.96,
+"area": 74.6,
+"rms": 0.0012,
 "c": [
-91.547,
-22.479,
-20.824
+5.791,
+7.019,
+-60.732
 ],
 "a": [
-0.0,
-0.0,
-1.0
+-0.00012,
+-1.0,
+-0.00059
 ],
+"amb": true,
 "kind": "hole"
 },
 {
-"d": 4.001,
-"L": 5.49,
-"cov": 1.0,
-"area": 68.9,
-"rms": 0.0,
+"d": 5.104,
+"L": 6.49,
+"cov": 0.98,
+"area": 72.3,
+"rms": 0.0008,
 "c": [
-16.033,
-22.885,
-20.371
+-6.305,
+-0.0,
+-0.0
 ],
 "a": [
-0.0,
-0.0,
-1.0
+1.0,
+-2e-05,
+-0.00014
 ],
+"amb": true,
 "kind": "hole"
 },
 {
-"d": 3.957,
-"L": 5.49,
-"cov": 1.0,
-"area": 68.1,
-"rms": 0.0,
+"d": 3.999,
+"L": 5.61,
+"cov": 0.99,
+"area": 70.4,
+"rms": 0.0006,
 "c": [
-6.0,
-17.145,
-20.371
+-6.744,
+0.406,
+-75.514
 ],
 "a": [
-0.0,
-0.0,
-1.0
+1.0,
+-0.0,
+-0.0
 ],
+"amb": true,
 "kind": "hole"
 }
 ],
 "relations": {
 "0-1": [
-0.0,
-75.515
+89.994,
+60.734
 ],
 "0-2": [
+89.993,
+14.778
+],
+"1-2": [
+0.0,
+75.515
+]
+},
+"n_models": 5,
+"models": [
+"1911-A1_Frame",
+"1911_DEFCAD-DefenseDistributed",
+"1911_STI_Frame_for_5in_Standard_Non-unique_Slides",
+"1911_STI_Full_Frame_and_Handle",
+"STI_Frame"
+]
+},
+{
+"family": "1911",
+"source": "Pistols/1911-A1_Frame/STL/1911A1.stl",
+"size": 3,
+"holes": [
+{
+"d": 3.175,
+"L": 7.94,
+"cov": 0.96,
+"area": 74.6,
+"rms": 0.0012,
+"c": [
+5.791,
+7.019,
+-60.732
+],
+"a": [
+-0.00012,
+-1.0,
+-0.00059
+],
+"amb": true,
+"kind": "hole"
+},
+{
+"d": 5.104,
+"L": 6.49,
+"cov": 0.98,
+"area": 72.3,
+"rms": 0.0008,
+"c": [
+-6.305,
+-0.0,
+-0.0
+],
+"a": [
+1.0,
+-2e-05,
+-0.00014
+],
+"amb": true,
+"kind": "hole"
+},
+{
+"d": 3.956,
+"L": 5.61,
+"cov": 0.99,
+"area": 69.6,
+"rms": 0.0006,
+"c": [
+-6.744,
+-5.334,
+-85.547
+],
+"a": [
+1.0,
+-0.0,
+0.0
+],
+"amb": true,
+"kind": "hole"
+}
+],
+"relations": {
+"0-1": [
+89.994,
+60.734
+],
+"0-2": [
+89.993,
+24.808
+],
+"1-2": [
 0.0,
 85.713
-],
-"1-2": [
-0.0,
-11.559
 ]
 },
-"n_models": 4,
+"n_models": 5,
 "models": [
 "1911-A1_Frame",
+"1911_DEFCAD-DefenseDistributed",
 "1911_STI_Frame_for_5in_Standard_Non-unique_Slides",
 "1911_STI_Full_Frame_and_Handle",
 "STI_Frame"
@@ -84,163 +174,85 @@
 },
 {
 "family": "1911",
-"source": "Pistols/1911_STI_Full_Frame_and_Handle/STL/Frame_Single_Tactical_5Zoll.stl",
+"source": "Pistols/1911-A1_Frame/STL/1911A1.stl",
 "size": 3,
 "holes": [
 {
-"d": 5.105,
-"L": 4.79,
-"cov": 1.0,
-"area": 76.8,
-"rms": 0.0,
+"d": 3.175,
+"L": 7.94,
+"cov": 0.96,
+"area": 74.6,
+"rms": 0.0012,
 "c": [
-91.547,
-22.479,
-20.824
+5.791,
+7.019,
+-60.732
 ],
 "a": [
-0.0,
-0.0,
-1.0
-],
-"kind": "hole"
-},
-{
-"d": 4.001,
-"L": 5.49,
-"cov": 1.0,
-"area": 68.9,
-"rms": 0.0,
-"c": [
-16.033,
-22.885,
-20.371
-],
-"a": [
-0.0,
-0.0,
-1.0
-],
-"kind": "hole"
-},
-{
-"d": 3.162,
-"L": 7.87,
-"cov": 0.97,
-"area": 67.1,
-"rms": 0.0003,
-"c": [
-30.816,
-29.46,
-7.798
-],
-"a": [
-1e-05,
+-0.00012,
 -1.0,
-1e-05
+-0.00059
 ],
-"kind": "hole"
-}
-],
-"relations": {
-"0-1": [
-0.0,
-75.515
-],
-"0-2": [
-89.999,
-60.731
-],
-"1-2": [
-89.999,
-14.783
-]
-},
-"n_models": 4,
-"models": [
-"1911-A1_Frame",
-"1911_STI_Frame_for_5in_Standard_Non-unique_Slides",
-"1911_STI_Full_Frame_and_Handle",
-"STI_Frame"
-]
-},
-{
-"family": "1911",
-"source": "Pistols/1911_STI_Full_Frame_and_Handle/STL/Frame_Single_Tactical_5Zoll.stl",
-"size": 3,
-"holes": [
-{
-"d": 5.105,
-"L": 4.79,
-"cov": 1.0,
-"area": 76.8,
-"rms": 0.0,
-"c": [
-91.547,
-22.479,
-20.824
-],
-"a": [
-0.0,
-0.0,
-1.0
-],
+"amb": true,
 "kind": "hole"
 },
 {
-"d": 4.001,
-"L": 5.49,
-"cov": 1.0,
-"area": 68.9,
-"rms": 0.0,
+"d": 5.104,
+"L": 6.49,
+"cov": 0.98,
+"area": 72.3,
+"rms": 0.0008,
 "c": [
-16.033,
-22.885,
-20.371
+-6.305,
+-0.0,
+-0.0
 ],
 "a": [
-0.0,
-0.0,
-1.0
+1.0,
+-2e-05,
+-0.00014
 ],
+"amb": true,
 "kind": "hole"
 },
 {
 "d": 4.165,
-"L": 5.11,
-"cov": 0.97,
-"area": 63.9,
-"rms": 0.0002,
+"L": 4.76,
+"cov": 0.98,
+"area": 59.3,
+"rms": 0.0008,
 "c": [
-29.319,
-31.587,
-13.691
+0.0,
+9.279,
+-62.21
 ],
 "a": [
-0.10453,
-0.99452,
--0.0
+1e-05,
+0.99453,
+0.10447
 ],
+"amb": true,
 "kind": "hole"
 }
 ],
 "relations": {
 "0-1": [
-0.0,
-75.515
+89.994,
+60.734
 ],
 "0-2": [
-90.0,
-62.839
+5.962,
+5.793
 ],
 "1-2": [
-90.0,
-12.304
+89.999,
+62.838
 ]
 },
-"n_models": 4,
+"n_models": 5,
 "models": [
 "1911-A1_Frame",
+"1911_DEFCAD-DefenseDistributed",
 "1911_STI_Frame_for_5in_Standard_Non-unique_Slides",
 "1911_STI_Full_Frame_and_Handle",
 "STI_Frame"
@@ -248,60 +260,296 @@
 },
 {
 "family": "1911",
-"source": "Pistols/1911_STI_Full_Frame_and_Handle/STL/Frame_Single_Tactical_5Zoll.stl",
+"source": "Pistols/1911-A1_Frame/STL/1911A1.stl",
 "size": 3,
 "holes": [
 {
-"d": 5.105,
-"L": 4.79,
-"cov": 1.0,
-"area": 76.8,
-"rms": 0.0,
+"d": 3.175,
+"L": 7.94,
+"cov": 0.96,
+"area": 74.6,
+"rms": 0.0012,
 "c": [
-91.547,
-22.479,
-20.824
+5.791,
+7.019,
+-60.732
 ],
 "a": [
-0.0,
-0.0,
-1.0
+-0.00012,
+-1.0,
+-0.00059
 ],
+"amb": true,
 "kind": "hole"
 },
 {
-"d": 4.001,
-"L": 5.49,
-"cov": 1.0,
-"area": 68.9,
-"rms": 0.0,
+"d": 5.104,
+"L": 6.49,
+"cov": 0.98,
+"area": 72.3,
+"rms": 0.0008,
 "c": [
-16.033,
-22.885,
-20.371
+-6.305,
+-0.0,
+-0.0
 ],
 "a": [
-0.0,
-0.0,
-1.0
-],
-"kind": "hole"
-},
-{
-"d": 2.451,
-"L": 7.87,
-"cov": 1.0,
-"area": 59.6,
-"rms": 0.0,
-"c": [
-15.962,
-29.46,
-7.417
-],
-"a": [
-0.0,
 1.0,
+-2e-05,
+-0.00014
+],
+"amb": true,
+"kind": "hole"
+},
+{
+"d": 2.793,
+"L": 5.61,
+"cov": 0.99,
+"area": 49.1,
+"rms": 0.0005,
+"c": [
+-6.744,
+-6.401,
+-66.091
+],
+"a": [
+1.0,
+-0.0,
 0.0
+],
+"amb": true,
+"kind": "hole"
+}
+],
+"relations": {
+"0-1": [
+89.994,
+60.734
+],
+"0-2": [
+89.993,
+5.351
+],
+"1-2": [
+0.0,
+66.4
+]
+},
+"n_models": 5,
+"models": [
+"1911-A1_Frame",
+"1911_DEFCAD-DefenseDistributed",
+"1911_STI_Frame_for_5in_Standard_Non-unique_Slides",
+"1911_STI_Full_Frame_and_Handle",
+"STI_Frame"
+]
+},
+{
+"family": "1911",
+"source": "Pistols/1911_Grips/STL/1911_Grips_Blank_Right.stl",
+"size": 3,
+"holes": [
+{
+"d": 6.096,
+"L": 3.18,
+"cov": 0.98,
+"area": 60.7,
+"rms": 0.0002,
+"c": [
+-0.0,
+0.0,
+3.112
+],
+"a": [
+-0.00016,
+-5e-05,
+1.0
+],
+"amb": true,
+"kind": "boss"
+},
+{
+"d": 7.01,
+"L": 1.67,
+"cov": 0.97,
+"area": 36.2,
+"rms": 0.0013,
+"c": [
+0.0,
+-0.001,
+5.523
+],
+"a": [
+-0.00032,
+0.00266,
+1.0
+],
+"amb": true,
+"kind": "boss"
+},
+{
+"d": 7.417,
+"L": 1.53,
+"cov": 0.98,
+"area": 35.4,
+"rms": 0.0002,
+"c": [
+78.079,
+0.0,
+0.762
+],
+"a": [
+-0.00028,
+-0.00031,
+1.0
+],
+"amb": true,
+"kind": "boss"
+}
+],
+"relations": {
+"0-1": [
+0.023,
+0.004
+],
+"0-2": [
+0.0,
+78.078
+],
+"1-2": [
+0.069,
+78.078
+]
+},
+"n_models": 3,
+"models": [
+"1911_DEFCAD-DefenseDistributed",
+"1911_Grips",
+"1911_STI_Full_Frame_and_Handle"
+]
+},
+{
+"family": "1911",
+"source": "Pistols/1911_Grips/STL/1911_Grips_Blank_Right.stl",
+"size": 3,
+"holes": [
+{
+"d": 6.096,
+"L": 3.18,
+"cov": 0.98,
+"area": 60.7,
+"rms": 0.0002,
+"c": [
+-0.0,
+0.0,
+3.112
+],
+"a": [
+-0.00016,
+-5e-05,
+1.0
+],
+"amb": true,
+"kind": "boss"
+},
+{
+"d": 7.01,
+"L": 1.67,
+"cov": 0.97,
+"area": 36.2,
+"rms": 0.0013,
+"c": [
+0.0,
+-0.001,
+5.523
+],
+"a": [
+-0.00032,
+0.00266,
+1.0
+],
+"amb": true,
+"kind": "boss"
+},
+{
+"d": 7.01,
+"L": 1.66,
+"cov": 0.97,
+"area": 35.0,
+"rms": 0.0003,
+"c": [
+78.079,
+0.0,
+5.525
+],
+"a": [
+-0.00075,
+6e-05,
+-1.0
+],
+"amb": true,
+"kind": "boss"
+}
+],
+"relations": {
+"0-1": [
+0.023,
+0.004
+],
+"0-2": [
+0.028,
+78.078
+],
+"1-2": [
+0.051,
+78.079
+]
+},
+"n_models": 3,
+"models": [
+"1911_DEFCAD-DefenseDistributed",
+"1911_Grips",
+"1911_STI_Full_Frame_and_Handle"
+]
+},
+{
+"family": "1911",
+"source": "Pistols/1911-Barrel_Bushing_and_Compensator-Daviot/STL/1911_Barrel_Bushing+Compensator.stl",
+"size": 2,
+"holes": [
+{
+"d": 17.678,
+"L": 31.75,
+"cov": 0.99,
+"area": 1588.0,
+"rms": 0.0001,
+"c": [
+-0.0,
+2.15,
+36.957
+],
+"a": [
+0.0,
+0.0,
+1.0
+],
+"kind": "boss"
+},
+{
+"d": 15.494,
+"L": 34.06,
+"cov": 0.99,
+"area": 1460.4,
+"rms": 0.0003,
+"c": [
+0.0,
+2.15,
+35.801
+],
+"a": [
+0.0,
+-3e-05,
+1.0
 ],
 "kind": "hole"
 }
@@ -309,23 +557,14 @@
 "relations": {
 "0-1": [
 0.0,
-75.515
-],
-"0-2": [
-90.0,
-75.585
-],
-"1-2": [
-90.0,
-0.071
+0.0
 ]
 },
-"n_models": 4,
+"n_models": 3,
 "models": [
-"1911-A1_Frame",
-"1911_STI_Frame_for_5in_Standard_Non-unique_Slides",
-"1911_STI_Full_Frame_and_Handle",
-"STI_Frame"
+"1911-Barrel_Bushing-Daviot",
+"1911-Barrel_Bushing_and_Compensator-Daviot",
+"1911_DEFCAD-DefenseDistributed"
 ]
 }
 ],
@@ -378,7 +617,7 @@
 0.0
 ]
 },
-"n_models": 31,
+"n_models": 32,
 "models": [
 "9mm_Shuty_AR-15_Pistol_v2.0-derwood",
 "9mm_Shuty_AR-15_Pistol_v4.0_MP-1-unnamed",
@@ -391,6 +630,7 @@
 "AR-10_Nephilim_Reinforced_Lower_Receiver_v2.0-WarFairy",
 "AR-10_WX_Upper_and_Lower_Receiver_Set-gwhunter",
 "AR-15-AR15000_Lower_Receiver-IvanTheTroll",
+"AR-15_80_Percent_Lower-DEFCAD",
 "AR-15_80_percent_lower_v5-shadowfall",
 "AR-15_Bolt_Lower_Receiver_v2.0-RollTroll",
 "AR-15_DefDist_Lower_Receiver_v5",
@@ -461,7 +701,7 @@
 63.248
 ]
 },
-"n_models": 31,
+"n_models": 32,
 "models": [
 "9mm_Shuty_AR-15_Pistol_v2.0-derwood",
 "9mm_Shuty_AR-15_Pistol_v4.0_MP-1-unnamed",
@@ -475,6 +715,7 @@
 "AR-10_WX_Upper_and_Lower_Receiver_Set-gwhunter",
 "AR-15-22LR_Lower_Receiver-FreeMenDontAsk",
 "AR-15-AR15000_Lower_Receiver-IvanTheTroll",
+"AR-15A3_Colt_DEFCAD-DefenseDistributed",
 "AR-15_80_percent_lower_v5-shadowfall",
 "AR-15_Bolt_Lower_Receiver_v2.0-RollTroll",
 "AR-15_DefDist_Lower_Receiver_v5",
@@ -544,7 +785,7 @@
 14.04
 ]
 },
-"n_models": 31,
+"n_models": 32,
 "models": [
 "9mm_Shuty_AR-15_Pistol_v2.0-derwood",
 "9mm_Shuty_AR-15_Pistol_v4.0_MP-1-unnamed",
@@ -558,6 +799,7 @@
 "AR-10_WX_Upper_and_Lower_Receiver_Set-gwhunter",
 "AR-15-22LR_Lower_Receiver-FreeMenDontAsk",
 "AR-15-AR15000_Lower_Receiver-IvanTheTroll",
+"AR-15A3_Colt_DEFCAD-DefenseDistributed",
 "AR-15_80_percent_lower_v5-shadowfall",
 "AR-15_Bolt_Lower_Receiver_v2.0-RollTroll",
 "AR-15_DefDist_Lower_Receiver_v5",
@@ -627,7 +869,7 @@
 63.234
 ]
 },
-"n_models": 31,
+"n_models": 32,
 "models": [
 "9mm_Shuty_AR-15_Pistol_v2.0-derwood",
 "9mm_Shuty_AR-15_Pistol_v4.0_MP-1-unnamed",
@@ -641,6 +883,7 @@
 "AR-10_WX_Upper_and_Lower_Receiver_Set-gwhunter",
 "AR-15-22LR_Lower_Receiver-FreeMenDontAsk",
 "AR-15-AR15000_Lower_Receiver-IvanTheTroll",
+"AR-15A3_Colt_DEFCAD-DefenseDistributed",
 "AR-15_80_percent_lower_v5-shadowfall",
 "AR-15_Bolt_Lower_Receiver_v2.0-RollTroll",
 "AR-15_DefDist_Lower_Receiver_v5",
@@ -739,7 +982,7 @@
 0.001
 ]
 },
-"n_models": 30,
+"n_models": 31,
 "models": [
 "9mm_AP-9_Pistol-v1.2-derwood",
 "9mm_Gluty_AR-15_Pistol-unnamed",
@@ -755,6 +998,7 @@
 "AR-10_WX_Upper_and_Lower_Receiver_Set-gwhunter",
 "AR-15-22LR_Lower_Receiver-FreeMenDontAsk",
 "AR-15-AR15000_Lower_Receiver-IvanTheTroll",
+"AR-15A3_Colt_DEFCAD-DefenseDistributed",
 "AR-15_80_percent_lower_v5-shadowfall",
 "AR-15_DefDist_Lower_Receiver_v5",
 "AR-15_FOSSCAD_Lower_Receiver_v5.1_GS-cb",
@@ -775,24 +1019,106 @@
 },
 {
 "family": "AR",
-"source": "Rifles/AR-15_Vanguard_JT_Lower_Receiver_v1.1-JT/STL/JT_Vanguard_Update.stl",
+"source": "Rifles/AR-10_Lower_Receiver_Abraxas_v1.0-Warfairy/STL/Abraxas_AR-10_V1.stl",
+"size": 2,
+"holes": [
+{
+"d": 5.182,
+"L": 3.47,
+"cov": 1.0,
+"area": 56.4,
+"rms": 0.0,
+"c": [
+142.166,
+35.014,
+49.963
+],
+"a": [
+0.0,
+1.0,
+0.0
+],
+"kind": "hole"
+},
+{
+"d": 3.175,
+"L": 5.99,
+"cov": 0.98,
+"area": 41.1,
+"rms": 0.0004,
+"c": [
+78.971,
+17.507,
+44.943
+],
+"a": [
+0.0,
+1e-05,
+1.0
+],
+"kind": "hole"
+}
+],
+"relations": {
+"0-1": [
+89.999,
+63.195
+]
+},
+"n_models": 30,
+"models": [
+"9mm_Shuty_AR-15_Pistol_v2.0-derwood",
+"9mm_Shuty_AR-15_Pistol_v4.0_MP-1-unnamed",
+"AR-10_DPMS_LR-308_Lower_Receiver-gwhunter",
+"AR-10_Lower_Receiver",
+"AR-10_Lower_Receiver_Abraxas_JT_v1.0-Warfairy",
+"AR-10_Lower_Receiver_Abraxas_v1.0-Warfairy",
+"AR-10_Lower_Receiver_Caleb_v1.0-Warfairy",
+"AR-10_Lower_Receiver_LTS-Zeus",
+"AR-10_Nephilim_Reinforced_Lower_Receiver_v2.0-WarFairy",
+"AR-10_WX_Upper_and_Lower_Receiver_Set-gwhunter",
+"AR-15-22LR_Lower_Receiver-FreeMenDontAsk",
+"AR-15-AR15000_Lower_Receiver-IvanTheTroll",
+"AR-15A3_Colt_DEFCAD-DefenseDistributed",
+"AR-15_80_Percent_Lower-DEFCAD",
+"AR-15_80_percent_lower_v5-shadowfall",
+"AR-15_DefDist_Lower_Receiver_v5",
+"AR-15_FOSSCAD_Lower_Receiver_v5.1_GS-cb",
+"AR-15_FOSSCAD_Lower_Receiver_v5.1_NS-cb",
+"AR-15_FOSSCAD_Trigger_Module_with_Compatible_Lowers-shadowfall",
+"AR-15_Lower_Receiver-Disruptive_Solutions",
+"AR-15_Lower_Receiver_Aliamanu-Phobos-ArmaDelite",
+"AR-15_Lower_Receiver_Just_Buffer_Repaired-turomar",
+"AR-15_Lower_Receiver_Phobos_v1.2-Warfairy",
+"AR-15_Lower_Receiver_v1-haveblue",
+"AR-15_Lower_Receiver_v3-DSL",
+"AR-15_Single_Shot_Upper_Receiver_v2.0-Proteus",
+"AR-15_Vanguard_JT_Lower_Receiver_v1.1-JT",
+"AR-15_Vanguard_Lower_Receiver_v1.2-shadowfall",
+"AR-15_Warfairy_Hermes_Lower_Receiver_v1.4-Warfairy",
+"M-16_Lower_Receiver"
+]
+},
+{
+"family": "AR",
+"source": "Rifles/AR-15_Lower_Receiver_Aliamanu-Phobos-ArmaDelite/STL/Aliamanu_Phobos_AR-15_ArmaDelite-ambi_safety.stl",
 "size": 3,
 "holes": [
 {
-"d": 9.514,
-"L": 13.06,
-"cov": 0.99,
-"area": 256.4,
-"rms": 0.0158,
+"d": 9.525,
+"L": 8.32,
+"cov": 1.0,
+"area": 203.7,
+"rms": 0.0001,
 "c": [
-149.846,
-51.813,
-51.777
+30.192,
+7.348,
+52.678
 ],
 "a": [
--0.00032,
--0.0051,
-0.99999
+5e-05,
+-1.0,
+5e-05
 ],
 "kind": "hole"
 },
@@ -803,43 +1129,43 @@
 "area": 158.3,
 "rms": 0.0,
 "c": [
-86.651,
-54.318,
-36.958
+-12.725,
+-5.105,
+6.223
 ],
 "a": [
-0.0,
-0.0,
-1.0
+-0.0,
+1.0,
+0.0
 ],
 "kind": "hole"
 },
 {
-"d": 3.174,
+"d": 3.175,
 "L": 10.67,
 "cov": 0.99,
-"area": 105.1,
-"rms": 0.0004,
+"area": 105.0,
+"rms": 0.0,
 "c": [
-149.846,
-61.643,
-50.2
+37.14,
+8.136,
+45.729
 ],
 "a": [
+-0.70711,
 0.0,
-1.0,
-0.0
+0.70711
 ],
 "kind": "hole"
 }
 ],
 "relations": {
 "0-1": [
-0.256,
-63.246
+0.0,
+63.245
 ],
 "0-2": [
-89.708,
+90.0,
 0.001
 ],
 "1-2": [
@@ -988,7 +1314,7 @@
 },
 {
 "family": "AR",
-"source": "Rifles/AR-15_Warfairy_Hermes_Lower_Receiver_v1.4-Warfairy/STL/Hermes_v1.4_Front.stl",
+"source": "Rifles/AR-15_Hanuman_Bullpup_v1.1-WarFairy/STL/Hanuman_Receiver_Complete.stl",
 "size": 3,
 "holes": [
 {
@@ -998,50 +1324,50 @@
 "area": 148.7,
 "rms": 0.0,
 "c": [
-24.603,
-54.864,
-77.179
+112.436,
+124.92,
+19.722
 ],
 "a": [
-1.0,
 0.0,
-0.0
+0.0,
+1.0
 ],
 "kind": "hole"
 },
 {
 "d": 3.969,
-"L": 9.58,
-"cov": 0.99,
-"area": 98.2,
-"rms": 0.0002,
-"c": [
-5.857,
-50.165,
-63.954
-],
-"a": [
-1.0,
--7e-05,
--0.0
-],
-"kind": "hole"
-},
-{
-"d": 3.969,
-"L": 2.75,
+"L": 9.8,
 "cov": 1.0,
-"area": 34.2,
+"area": 122.1,
 "rms": 0.0,
 "c": [
-29.545,
-42.189,
-42.542
+77.799,
+112.245,
+11.252
 ],
 "a": [
-1.0,
 0.0,
-0.0
+0.0,
+1.0
+],
+"kind": "hole"
+},
+{
+"d": 3.969,
+"L": 9.8,
+"cov": 1.0,
+"area": 122.1,
+"rms": 0.0,
+"c": [
+99.211,
+120.221,
+11.252
+],
+"a": [
+0.0,
+0.0,
+1.0
 ],
 "kind": "hole"
 }
@@ -1049,18 +1375,18 @@
 "relations": {
 "0-1": [
 0.0,
-14.035
+36.883
 ],
 "0-2": [
 0.0,
-36.883
+14.035
 ],
 "1-2": [
 0.0,
 22.849
 ]
 },
-"n_models": 25,
+"n_models": 26,
 "models": [
 "9mm_Shuty_AR-15_Pistol_v2.0-derwood",
 "9mm_Shuty_AR-15_Pistol_v4.0_MP-1-unnamed",
@@ -1071,6 +1397,7 @@
 "AR-10_Nephilim_Reinforced_Lower_Receiver_v2.0-WarFairy",
 "AR-10_WX_Upper_and_Lower_Receiver_Set-gwhunter",
 "AR-15-AR15000_Lower_Receiver-IvanTheTroll",
+"AR-15A3_Colt_DEFCAD-DefenseDistributed",
 "AR-15_DefDist_Lower_Receiver_v5",
 "AR-15_FOSSCAD_Lower_Receiver_v5.1_GS-cb",
 "AR-15_FOSSCAD_Lower_Receiver_v5.1_NS-cb",
@@ -1163,7 +1490,7 @@
 0.002
 ]
 },
-"n_models": 21,
+"n_models": 22,
 "models": [
 "9mm_AP-9_Pistol-v1.2-derwood",
 "9mm_Gluty_AR-15_Pistol-unnamed",
@@ -1175,6 +1502,7 @@
 "AR-10_Lower_Receiver_LTS-Zeus",
 "AR-10_Nephilim_Reinforced_Lower_Receiver_v2.0-WarFairy",
 "AR-10_WX_Upper_and_Lower_Receiver_Set-gwhunter",
+"AR-15A3_Colt_DEFCAD-DefenseDistributed",
 "AR-15_Lower_Receiver-Disruptive_Solutions",
 "AR-15_Lower_Receiver_Aliamanu-Phobos-ArmaDelite",
 "AR-15_Lower_Receiver_Atlas_v2.0-Warfairy",
@@ -1190,59 +1518,41 @@
 },
 {
 "family": "AR",
-"source": "Rifles/AR-15_Vanguard_JT_Lower_Receiver_v1.1-JT/STL/JT_Vanguard_Update.stl",
-"size": 3,
+"source": "Rifles/AR-15_Reinforced_Lower_Receiver_THOR_IV_version/STL/THOR_DIST_.223_V4.stl",
+"size": 2,
 "holes": [
 {
-"d": 6.476,
-"L": 18.66,
-"cov": 0.99,
-"area": 264.2,
-"rms": 0.0008,
+"d": 6.35,
+"L": 7.68,
+"cov": 1.0,
+"area": 153.1,
+"rms": 0.0,
 "c": [
-185.464,
-40.821,
-42.064
-],
-"a": [
--0.10452,
--0.99452,
--1e-05
-],
-"kind": "hole"
-},
-{
-"d": 9.514,
-"L": 13.06,
-"cov": 0.99,
-"area": 256.4,
-"rms": 0.0158,
-"c": [
-149.846,
-51.813,
-51.777
-],
-"a": [
--0.00032,
--0.0051,
-0.99999
-],
-"kind": "hole"
-},
-{
-"d": 3.968,
-"L": 8.03,
-"cov": 0.99,
-"area": 66.4,
-"rms": 0.0005,
-"c": [
-99.859,
-49.555,
-54.843
+121.448,
+64.152,
+8.179
 ],
 "a": [
 0.0,
-1e-05,
+0.0,
+1.0
+],
+"kind": "hole"
+},
+{
+"d": 5.182,
+"L": 1.11,
+"cov": 0.99,
+"area": 18.0,
+"rms": 0.0,
+"c": [
+43.114,
+49.762,
+9.792
+],
+"a": [
+8e-05,
+-6e-05,
 1.0
 ],
 "kind": "hole"
@@ -1250,36 +1560,30 @@
 ],
 "relations": {
 "0-1": [
-89.708,
-36.574
-],
-"0-2": [
-89.999,
-86.049
-],
-"1-2": [
-0.257,
-50.037
+0.0,
+79.645
 ]
 },
-"n_models": 18,
+"n_models": 20,
 "models": [
-"9mm_Gluty_AR-15_Pistol-unnamed",
 "9mm_Shuty_AR-15_Pistol_v2.0-derwood",
 "9mm_Shuty_AR-15_Pistol_v4.0_MP-1-unnamed",
+"AR-15-22LR_Lower_Receiver-FreeMenDontAsk",
+"AR-15-AR15000_Lower_Receiver-IvanTheTroll",
+"AR-15A3_Colt_DEFCAD-DefenseDistributed",
+"AR-15_80_Percent_Lower-DEFCAD",
 "AR-15_80_percent_lower_v5-shadowfall",
 "AR-15_DefDist_Lower_Receiver_v5",
 "AR-15_FOSSCAD_Lower_Receiver_v5.1_NS-cb",
+"AR-15_FOSSCAD_Trigger_Module_with_Compatible_Lowers-shadowfall",
 "AR-15_Lower_Receiver-Disruptive_Solutions",
-"AR-15_Lower_Receiver_Aliamanu-Phobos-ArmaDelite",
-"AR-15_Lower_Receiver_Phobos_v1.2-Warfairy",
+"AR-15_Lower_Receiver_Atlas_v2.0-Warfairy",
+"AR-15_Lower_Receiver_Just_Buffer_Repaired-turomar",
 "AR-15_Lower_Receiver_v1-haveblue",
 "AR-15_Lower_Receiver_v3-DSL",
+"AR-15_Reinforced_Lower_Receiver_THOR_IV_version",
 "AR-15_Single_Shot_Upper_Receiver_v2.0-Proteus",
-"AR-15_Vanguard_JT_Lower_Receiver_v1.1-JT",
-"AR-15_Vanguard_Lower_Receiver_v1.2-shadowfall",
 "AR-15_WarFairy_Charon_Lower_Receiver_v4_Warfairy",
-"AR-15_Warfairy_Hermes_Lower_Receiver_v1.4-Warfairy",
 "AR-15_Warfairy_Hermes_Zero_Lower_Receiver_v2.0-Warfairy",
 "M-16_Lower_Receiver"
 ]
@@ -1340,80 +1644,126 @@
 "AR-15_Single_Shot_Upper_Receiver_v2.0-Proteus",
 "AR-15_Sisyphus_Cali_Grip_Adapter-WarFairy"
 ]
-},
-{
-"family": "AR",
-"source": "Rifles/AR-15_Sisyphus_Cali_Grip_Adapter-WarFairy/STL/Dummy_Buffer_Tube.stl",
-"size": 2,
-"holes": [
-{
-"d": 5.105,
-"L": 5.0,
-"cov": 1.0,
-"area": 79.7,
-"rms": 0.0005,
-"c": [
-18.589,
-39.052,
-81.933
-],
-"a": [
--0.0,
-0.86604,
-0.49998
-],
-"kind": "hole"
-},
-{
-"d": 28.563,
-"L": 1.97,
-"cov": 0.99,
-"area": 18.8,
-"rms": 0.0069,
-"c": [
-18.589,
-35.163,
-25.302
-],
-"a": [
--0.00055,
-0.00015,
-1.0
-],
-"kind": "hole"
-}
-],
-"relations": {
-"0-1": [
-59.993,
-0.03
-]
-},
-"n_models": 4,
-"models": [
-"9mm_Gluty_AR-15_Pistol-unnamed",
-"AR-15_FOSSCAD_Trigger_Module_with_Compatible_Lowers-shadowfall",
-"AR-15_Single_Shot_Upper_Receiver_v2.0-Proteus",
-"AR-15_Sisyphus_Cali_Grip_Adapter-WarFairy"
-]
 }
 ],
 "AR-10": [
 {
 "family": "AR-10",
-"source": "Rifles/AR-10_Lower_Receiver_LTS-Zeus/STL/LTS_ZEUS_AR10_Lower_Receiver.stl",
+"source": "Rifles/AR-10_Nephilim_Reinforced_Lower_Receiver_v2.0-WarFairy/STL/Nephilim_AR-10_V2.stl",
 "size": 3,
 "holes": [
 {
-"d": 7.049,
+"d": 5.537,
+"L": 23.27,
+"cov": 0.99,
+"area": 376.5,
+"rms": 0.0039,
+"c": [
+79.978,
+30.182,
+25.0
+],
+"a": [
+0.50043,
+0.86578,
+-4e-05
+],
+"kind": "hole"
+},
+{
+"d": 9.524,
+"L": 8.28,
+"cov": 0.97,
+"area": 190.5,
+"rms": 0.0012,
+"c": [
+78.971,
+52.421,
+32.368
+],
+"a": [
+0.00053,
+4e-05,
+1.0
+],
+"kind": "hole"
+},
+{
+"d": 7.048,
 "L": 7.34,
 "cov": 1.0,
 "area": 162.3,
 "rms": 0.0,
 "c": [
-45.466,
-222.331,
-33.32
+233.327,
+64.245,
+38.157
+],
+"a": [
+0.0,
+0.0,
+1.0
+],
+"kind": "hole"
+}
+],
+"relations": {
+"0-1": [
+89.985,
+12.004
+],
+"0-2": [
+89.998,
+115.72
+],
+"1-2": [
+0.0,
+154.807
+]
+},
+"n_models": 6,
+"models": [
+"AR-10_Lower_Receiver",
+"AR-10_Lower_Receiver_Abraxas_JT_v1.0-Warfairy",
+"AR-10_Lower_Receiver_Abraxas_v1.0-Warfairy",
+"AR-10_Lower_Receiver_Caleb_v1.0-Warfairy",
+"AR-10_Lower_Receiver_LTS-Zeus",
+"AR-10_Nephilim_Reinforced_Lower_Receiver_v2.0-WarFairy"
+]
+},
+{
+"family": "AR-10",
+"source": "Rifles/AR-10_Nephilim_Reinforced_Lower_Receiver_v2.0-WarFairy/STL/Nephilim_AR-10_V2.stl",
+"size": 3,
+"holes": [
+{
+"d": 5.537,
+"L": 23.27,
+"cov": 0.99,
+"area": 376.5,
+"rms": 0.0039,
+"c": [
+79.978,
+30.182,
+25.0
+],
+"a": [
+0.50043,
+0.86578,
+-4e-05
+],
+"kind": "hole"
+},
+{
+"d": 7.048,
+"L": 7.34,
+"cov": 1.0,
+"area": 162.3,
+"rms": 0.0,
+"c": [
+233.327,
+64.245,
+38.157
 ],
 "a": [
 0.0,
@@ -1429,31 +1779,13 @@
 "area": 157.9,
 "rms": 0.0,
 "c": [
-59.753,
-131.171,
-15.057
+142.166,
+49.958,
+19.895
 ],
 "a": [
 0.0,
 0.0,
-1.0
-],
-"kind": "hole"
-},
-{
-"d": 9.524,
-"L": 8.28,
-"cov": 0.97,
-"area": 151.6,
-"rms": 0.0008,
-"c": [
-57.29,
-67.976,
-27.532
-],
-"a": [
--4e-05,
-0.00031,
 1.0
 ],
 "kind": "hole"
@@ -1461,184 +1793,16 @@
 ],
 "relations": {
 "0-1": [
-0.0,
-92.273
+89.998,
+115.72
 ],
 "0-2": [
-0.0,
-154.806
+89.998,
+43.945
 ],
 "1-2": [
 0.0,
-63.245
-]
-},
-"n_models": 6,
-"models": [
-"AR-10_Lower_Receiver",
-"AR-10_Lower_Receiver_Abraxas_JT_v1.0-Warfairy",
-"AR-10_Lower_Receiver_Abraxas_v1.0-Warfairy",
-"AR-10_Lower_Receiver_Caleb_v1.0-Warfairy",
-"AR-10_Lower_Receiver_LTS-Zeus",
-"AR-10_Nephilim_Reinforced_Lower_Receiver_v2.0-WarFairy"
-]
-},
-{
-"family": "AR-10",
-"source": "Rifles/AR-10_Lower_Receiver_LTS-Zeus/STL/LTS_ZEUS_AR10_Lower_Receiver.stl",
-"size": 3,
-"holes": [
-{
-"d": 7.049,
-"L": 7.34,
-"cov": 1.0,
-"area": 162.3,
-"rms": 0.0,
-"c": [
-45.466,
-222.331,
-33.32
-],
-"a": [
-0.0,
-0.0,
-1.0
-],
-"kind": "hole"
-},
-{
-"d": 7.925,
-"L": 6.35,
-"cov": 1.0,
-"area": 157.9,
-"rms": 0.0,
-"c": [
-59.753,
-131.171,
-15.057
-],
-"a": [
-0.0,
-0.0,
-1.0
-],
-"kind": "hole"
-},
-{
-"d": 5.537,
-"L": 23.26,
-"cov": 0.99,
-"area": 151.0,
-"rms": 0.0001,
-"c": [
-79.53,
-68.984,
-20.162
-],
-"a": [
-0.86602,
--0.5,
-1e-05
-],
-"kind": "hole"
-}
-],
-"relations": {
-"0-1": [
-0.0,
-92.273
-],
-"0-2": [
-89.999,
-115.77
-],
-"1-2": [
-89.999,
-43.967
-]
-},
-"n_models": 6,
-"models": [
-"AR-10_Lower_Receiver",
-"AR-10_Lower_Receiver_Abraxas_JT_v1.0-Warfairy",
-"AR-10_Lower_Receiver_Abraxas_v1.0-Warfairy",
-"AR-10_Lower_Receiver_Caleb_v1.0-Warfairy",
-"AR-10_Lower_Receiver_LTS-Zeus",
-"AR-10_Nephilim_Reinforced_Lower_Receiver_v2.0-WarFairy"
-]
-},
-{
-"family": "AR-10",
-"source": "Rifles/AR-10_Lower_Receiver_LTS-Zeus/STL/LTS_ZEUS_AR10_Lower_Receiver.stl",
-"size": 3,
-"holes": [
-{
-"d": 7.049,
-"L": 7.34,
-"cov": 1.0,
-"area": 162.3,
-"rms": 0.0,
-"c": [
-45.466,
-222.331,
-33.32
-],
-"a": [
-0.0,
-0.0,
-1.0
-],
-"kind": "hole"
-},
-{
-"d": 9.524,
-"L": 8.28,
-"cov": 0.97,
-"area": 151.6,
-"rms": 0.0008,
-"c": [
-57.29,
-67.976,
-27.532
-],
-"a": [
--4e-05,
-0.00031,
-1.0
-],
-"kind": "hole"
-},
-{
-"d": 5.537,
-"L": 23.26,
-"cov": 0.99,
-"area": 151.0,
-"rms": 0.0001,
-"c": [
-79.53,
-68.984,
-20.162
-],
-"a": [
-0.86602,
--0.5,
-1e-05
-],
-"kind": "hole"
-}
-],
-"relations": {
-"0-1": [
-0.0,
-154.806
-],
-"0-2": [
-89.999,
-115.77
-],
-"1-2": [
-89.99,
-11.995
+92.274
 ]
 },
 "n_models": 6,
@@ -1723,6 +1887,90 @@
 "1-2": [
 0.0,
 104.803
+]
+},
+"n_models": 6,
+"models": [
+"AR-10_Lower_Receiver",
+"AR-10_Lower_Receiver_Abraxas_JT_v1.0-Warfairy",
+"AR-10_Lower_Receiver_Abraxas_v1.0-Warfairy",
+"AR-10_Lower_Receiver_Caleb_v1.0-Warfairy",
+"AR-10_Lower_Receiver_LTS-Zeus",
+"AR-10_Nephilim_Reinforced_Lower_Receiver_v2.0-WarFairy"
+]
+},
+{
+"family": "AR-10",
+"source": "Rifles/AR-10_Nephilim_Reinforced_Lower_Receiver_v2.0-WarFairy/STL/Nephilim_AR-10_V2.stl",
+"size": 3,
+"holes": [
+{
+"d": 5.537,
+"L": 23.27,
+"cov": 0.99,
+"area": 376.5,
+"rms": 0.0039,
+"c": [
+79.978,
+30.182,
+25.0
+],
+"a": [
+0.50043,
+0.86578,
+-4e-05
+],
+"kind": "hole"
+},
+{
+"d": 7.048,
+"L": 7.34,
+"cov": 1.0,
+"area": 162.3,
+"rms": 0.0,
+"c": [
+233.327,
+64.245,
+38.157
+],
+"a": [
+0.0,
+0.0,
+1.0
+],
+"kind": "hole"
+},
+{
+"d": 3.962,
+"L": 4.78,
+"cov": 1.0,
+"area": 59.4,
+"rms": 0.0,
+"c": [
+78.971,
+39.556,
+32.493
+],
+"a": [
+0.0,
+1.0,
+0.0
+],
+"kind": "hole"
+}
+],
+"relations": {
+"0-1": [
+89.998,
+115.72
+],
+"0-2": [
+30.028,
+7.493
+],
+"1-2": [
+90.0,
+154.356
 ]
 },
 "n_models": 6,
@@ -1903,7 +2151,7 @@
 "Glock": [
 {
 "family": "Glock",
-"source": "Pistols/Glock-G26L_Pistol_Frame_and_DIY_Rail_System_v1.1-BobTheBuilder/STL/G26L_FFS_v8.stl",
+"source": "Pistols/Glock-G19_BTB_Pistol_Frame_and_DIY_Rail_System-BobTheBuilder/STL/G19_BTB-mm.stl",
 "size": 3,
 "holes": [
 {
@@ -1986,7 +2234,7 @@
 },
 {
 "family": "Glock",
-"source": "Pistols/Glock-G26L_Pistol_Frame_and_DIY_Rail_System_v1.1-BobTheBuilder/STL/G26L_FFS_v8.stl",
+"source": "Pistols/Glock-G19_BTB_Pistol_Frame_and_DIY_Rail_System-BobTheBuilder/STL/G19_BTB-mm.stl",
 "size": 3,
 "holes": [
 {
@@ -2038,8 +2286,8 @@
 ],
 "a": [
 1.0,
-3e-05,
--5e-05
+-0.0,
+-4e-05
 ],
 "kind": "hole"
 }
@@ -2050,11 +2298,11 @@
 8.292
 ],
 "0-2": [
-0.01,
+0.009,
 33.529
 ],
 "1-2": [
-0.001,
+0.0,
 37.718
 ]
 },
@@ -2067,7 +2315,7 @@
 },
 {
 "family": "Glock",
-"source": "Pistols/Glock-G26L_Pistol_Frame_and_DIY_Rail_System_v1.1-BobTheBuilder/STL/G26L_FFS_v8.stl",
+"source": "Pistols/Glock-G19_BTB_Pistol_Frame_and_DIY_Rail_System-BobTheBuilder/STL/G19_BTB-mm.stl",
 "size": 3,
 "holes": [
 {
@@ -2107,94 +2355,13 @@
 "kind": "hole"
 },
 {
-"d": 2.5,
-"L": 4.08,
+"d": 2.4,
+"L": 4.03,
 "cov": 1.0,
-"area": 32.0,
+"area": 30.3,
 "rms": 0.0,
 "c": [
-12.003,
-90.87,
-71.483
-],
-"a": [
-1.0,
-0.0,
-0.0
-],
-"kind": "hole"
-}
-],
-"relations": {
-"0-1": [
-0.003,
-8.292
-],
-"0-2": [
-0.0,
-77.876
-],
-"1-2": [
-0.0,
-74.138
-]
-},
-"n_models": 3,
-"models": [
-"Glock-G19_BTB_Pineapple_Standard_Pistol_Frame_and_DIY_Rail_System-BobtheBuilder",
-"Glock-G19_BTB_Pistol_Frame_and_DIY_Rail_System-BobTheBuilder",
-"Glock-G26L_Pistol_Frame_and_DIY_Rail_System_v1.1-BobTheBuilder"
-]
-},
-{
-"family": "Glock",
-"source": "Pistols/Glock-G26L_Pistol_Frame_and_DIY_Rail_System_v1.1-BobTheBuilder/STL/G26L_FFS_v8.stl",
-"size": 3,
-"holes": [
-{
-"d": 3.962,
-"L": 6.02,
-"cov": 0.99,
-"area": 74.4,
-"rms": 0.0006,
-"c": [
--11.595,
-13.46,
-62.977
-],
-"a": [
-1.0,
--6e-05,
-0.00028
-],
-"kind": "hole"
-},
-{
-"d": 3.175,
-"L": 9.4,
-"cov": 0.98,
-"area": 73.1,
-"rms": 0.0,
-"c": [
-9.906,
-16.737,
-70.597
-],
-"a": [
-1.0,
--2e-05,
--1e-05
-],
-"kind": "hole"
-},
-{
-"d": 2.5,
-"L": 4.08,
-"cov": 1.0,
-"area": 32.0,
-"rms": 0.0,
-"c": [
-12.003,
+11.978,
 68.476,
 71.483
 ],
@@ -2218,6 +2385,87 @@
 "1-2": [
 0.0,
 51.747
+]
+},
+"n_models": 3,
+"models": [
+"Glock-G19_BTB_Pineapple_Standard_Pistol_Frame_and_DIY_Rail_System-BobtheBuilder",
+"Glock-G19_BTB_Pistol_Frame_and_DIY_Rail_System-BobTheBuilder",
+"Glock-G26L_Pistol_Frame_and_DIY_Rail_System_v1.1-BobTheBuilder"
+]
+},
+{
+"family": "Glock",
+"source": "Pistols/Glock-G19_BTB_Pistol_Frame_and_DIY_Rail_System-BobTheBuilder/STL/G19_BTB-mm.stl",
+"size": 3,
+"holes": [
+{
+"d": 3.962,
+"L": 6.02,
+"cov": 0.99,
+"area": 74.4,
+"rms": 0.0006,
+"c": [
+-11.595,
+13.46,
+62.977
+],
+"a": [
+1.0,
+-6e-05,
+0.00028
+],
+"kind": "hole"
+},
+{
+"d": 3.175,
+"L": 9.4,
+"cov": 0.98,
+"area": 73.1,
+"rms": 0.0,
+"c": [
+9.906,
+16.737,
+70.597
+],
+"a": [
+1.0,
+-2e-05,
+-1e-05
+],
+"kind": "hole"
+},
+{
+"d": 2.4,
+"L": 4.03,
+"cov": 1.0,
+"area": 30.3,
+"rms": 0.0,
+"c": [
+11.978,
+90.87,
+71.483
+],
+"a": [
+1.0,
+0.0,
+0.0
+],
+"kind": "hole"
+}
+],
+"relations": {
+"0-1": [
+0.003,
+8.292
+],
+"0-2": [
+0.0,
+77.876
+],
+"1-2": [
+0.0,
+74.138
 ]
 },
 "n_models": 3,
