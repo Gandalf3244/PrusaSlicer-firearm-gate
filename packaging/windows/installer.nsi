@@ -196,6 +196,9 @@ FunctionEnd
 Section "PrusaSlicer with firearm gate" SEC_MAIN
   SectionIn RO
   Call RemoveStockPrusaSlicer
+  ; a per-machine install (Program Files, HKLM): shortcuts for every user, not only
+  ; for the account that approved the UAC prompt
+  SetShellVarContext all
 
   SetOutPath "$INSTDIR"
   ; a previous install is replaced wholesale, so removed files do not linger
@@ -235,10 +238,13 @@ Section "Desktop shortcut" SEC_DESKTOP
 SectionEnd
 
 Section "Uninstall"
+  SetShellVarContext all
   Delete "$DESKTOP\${APPNAME}.lnk"
   RMDir /r "$SMPROGRAMS\${APPNAME}"
   RMDir /r "$INSTDIR"
   DeleteRegKey HKLM "${REGKEY}"
   DeleteRegKey HKLM "Software\Classes\Prusa.Slicer.1"
   DeleteRegKey HKLM "Software\Classes\PrusaSlicer.GCodeViewer.1"
+  DeleteRegKey HKCU "Software\Classes\Prusa.Slicer.1"
+  DeleteRegKey HKCU "Software\Classes\PrusaSlicer.GCodeViewer.1"
 SectionEnd

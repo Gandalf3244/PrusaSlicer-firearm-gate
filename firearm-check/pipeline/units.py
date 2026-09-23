@@ -57,6 +57,20 @@ def load_mesh(path, rel_path: str | None = None):
     return prepare_mesh(trimesh.load(path, force="mesh", process=True), rel_path)
 
 
+INSIDE_OUT_RATIO = -0.1   # signed volume / convex-hull volume of an open mesh that is inside out
+                          # (open meshes that are right way out: >= 0.11 in library and negatives)
+
+
+def _inside_out(mesh) -> bool:
+    """An open mesh's signed volume still tells which side is inside when
+    most of the surface is there; only a clearly negative one is flipped."""
+    try:
+        hull = mesh.convex_hull.volume
+    except Exception:           # noqa: BLE001 - degenerate (flat / tiny) meshes
+        return False
+    return hull > 0 and mesh.volume / hull < INSIDE_OUT_RATIO
+
+
 def prepare_mesh(mesh, rel_path: str | None = None, scale: float | None = None):
     """Repair winding and bring an already loaded mesh to millimetres. 27
     library files (e.g. `1911_Slide_Model.stl`, 23 % of its faces flipped)
@@ -73,5 +87,9 @@ def prepare_mesh(mesh, rel_path: str | None = None, scale: float | None = None):
         # consistently wound but hole-vs-boss stays a guess. Flag it so the
         # matcher accepts either kind for this mesh's cylinders.
         mesh.metadata["concavity_ambiguous"] = not mesh.is_watertight
+    if not mesh.is_watertight and _inside_out(mesh):
+        # an open mesh that is (still, after the repair) inside out - a mirrored
+        # export or normals flipped on purpose: every hole would read as a boss
+        mesh.invert()
     mesh.apply_scale(infer_scale(mesh, rel_path) if scale is None else scale)
     return mesh

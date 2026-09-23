@@ -2,14 +2,18 @@
 #include "FirearmGate.hpp"
 
 #include "I18N.hpp"
+#include "MeshBoolean.hpp"
 #include "Model.hpp"
+#include "SLA/Hollowing.hpp"
 #include "TriangleMesh.hpp"
 #include "Utils.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <thread>
 #include <unordered_map>
@@ -97,28 +101,128 @@ int checker_timeout_seconds()
     return 300;
 }
 
-// The identification is pose independent, so an instance is characterised by
-// its scaling and mirroring only: moving or rotating an object on the plate
-// keeps the cached verdict, scaling it does not.
-std::string cache_key(const ModelObject &object, const Vec3d &scale, const Vec3d &mirror)
+// Effective value of a numeric region option inside a modifier: its own
+// setting, else the object's; unknown when neither sets it.
+std::optional<double> numeric_value(const ConfigOption *opt)
+{
+    if (opt == nullptr)
+        return std::nullopt;
+    switch (opt->type()) {
+    case coInt:     return double(opt->getInt());      // getFloat() throws on an int option
+    case coFloat:
+    case coPercent: return opt->getFloat();
+    default:        return std::nullopt;
+    }
+}
+
+std::optional<double> region_option(const ModelVolume &v, const ModelObject &object, const char *key)
+{
+    if (std::optional<double> own = numeric_value(v.config.option(key)))
+        return own;
+    return numeric_value(object.config.option(key));
+}
+
+// A modifier that prints nothing inside itself (no perimeters, 0 % infill)
+// leaves a void where it overlaps the part - it cuts like a negative volume.
+bool is_void_modifier(const ModelVolume &v, const ModelObject &object)
+{
+    if (! v.is_modifier())
+        return false;
+    const std::optional<double> perimeters = region_option(v, object, "perimeters");
+    const std::optional<double> infill     = region_option(v, object, "fill_density");
+    return perimeters && infill && *perimeters == 0. && *infill == 0.;
+}
+
+// The shape that would be printed, in object coordinates (instance transform
+// not applied): model parts minus negative volumes, void modifiers and (SLA)
+// drain holes. Mirrored volumes are re-wound so they stay right way out -
+// an inside-out copy reads every hole as a pin.
+TriangleMesh printed_mesh(const ModelObject &object, bool sla)
+{
+    TriangleMesh parts, cut;
+    for (const ModelVolume *v : object.volumes) {
+        const bool part = v->is_model_part();
+        if (! part && ! v->is_negative_volume() && ! is_void_modifier(*v, object))
+            continue;
+        TriangleMesh m(v->mesh());
+        m.transform(v->get_matrix(), true);
+        (part ? parts : cut).merge(m);
+    }
+    BOOST_LOG_TRIVIAL(debug) << "Firearm gate: \"" << object.name << "\": " << object.volumes.size() << " volumes, "
+                             << parts.facets_count() << " part facets, " << cut.facets_count() << " cut facets"
+                             << "; parts box " << parts.bounding_box().min.transpose() << " / " << parts.bounding_box().max.transpose()
+                             << "; cut box " << cut.bounding_box().min.transpose() << " / " << cut.bounding_box().max.transpose();
+    if (sla)
+        for (const sla::DrainHole &hole : object.sla_drain_holes)
+            if (! hole.failed)
+                cut.merge(TriangleMesh(hole.to_mesh()));
+    if (! cut.empty() && ! parts.empty()) {
+        const size_t n_parts = parts.facets_count(), n_cut = cut.facets_count();
+        try {
+            TriangleMesh result = parts;
+            MeshBoolean::cgal::minus(result, cut);
+            parts = std::move(result);
+            BOOST_LOG_TRIVIAL(info) << "Firearm gate: \"" << object.name << "\": " << n_parts << " part facets minus "
+                                    << n_cut << " cut facets -> " << parts.facets_count();
+        } catch (...) {
+            // Open or self-intersecting meshes cannot be subtracted. The removed
+            // volumes turned inside out are the walls of the holes they cut, which
+            // is what the checker measures.
+            cut.flip_triangles();
+            parts.merge(cut);
+            BOOST_LOG_TRIVIAL(info) << "Firearm gate: \"" << object.name << "\": boolean failed, " << n_cut
+                                    << " cut facets added inside out";
+        }
+    }
+    return parts;
+}
+
+// What an instance does to the object's shape, independent of where it is
+// placed: M^T M of the linear part (rotation-free; scaling, skew and their
+// axes) and whether it mirrors. Moving or rotating an object on the plate keeps
+// the cached verdict; scaling, skewing or mirroring it does not.
+std::string instance_shape(const ModelInstance &instance)
+{
+    const Matrix3d m   = instance.get_matrix_no_offset().matrix().block<3, 3>(0, 0);
+    const Matrix3d mtm = m.transpose() * m;
+    std::ostringstream ss;
+    ss.precision(6);
+    for (int r = 0; r < 3; ++ r)
+        for (int c = r; c < 3; ++ c)
+            ss << mtm(r, c) << ',';
+    ss << (m.determinant() < 0. ? "mirrored" : "direct");
+    return ss.str();
+}
+
+// Every volume that shapes the print is part of the key (parts, negative
+// volumes, modifiers with the two options that can make them void), and so
+// are the SLA drain holes and the instance shape.
+std::string cache_key(const ModelObject &object, const std::string &shape, bool sla)
 {
     std::ostringstream ss;
     ss.precision(6);
     for (const ModelVolume *v : object.volumes)
-        if (v->is_model_part()) {
+        if (v->is_model_part() || v->is_negative_volume() || v->is_modifier()) {
             // The mesh is shared and immutable; the counts and the box guard against
             // an address being reused by a different mesh.
             const TriangleMesh &m  = v->mesh();
             const BoundingBoxf3 bb = m.bounding_box();
-            ss << v->get_mesh_shared_ptr().get() << ':' << m.facets_count() << ':' << m.its.vertices.size()
-               << ':' << bb.min.transpose() << ':' << bb.max.transpose() << ':';
+            ss << int(v->type()) << ':' << v->get_mesh_shared_ptr().get() << ':' << m.facets_count() << ':'
+               << m.its.vertices.size() << ':' << bb.min.transpose() << ':' << bb.max.transpose() << ':';
             const Transform3d &t = v->get_matrix();
             for (int r = 0; r < 3; ++ r)
                 for (int c = 0; c < 4; ++ c)
                     ss << t(r, c) << ',';
+            if (v->is_modifier())
+                ss << "void=" << is_void_modifier(*v, object);
             ss << ';';
         }
-    ss << "scale=" << scale.transpose() << ";mirror=" << mirror.transpose();
+    if (sla) {
+        ss << "sla";
+        for (const sla::DrainHole &h : object.sla_drain_holes)
+            ss << ';' << h.pos.transpose() << ',' << h.normal.transpose() << ',' << h.radius << ',' << h.height << ',' << h.failed;
+    }
+    ss << ";shape=" << shape;
     return ss.str();
 }
 
@@ -137,63 +241,10 @@ std::string read_file(const fs::path &path)
     return ss.str();
 }
 
-CheckResult run_checker(const CheckerCommand &checker, const TriangleMesh &mesh, const std::string &name)
+// Evidence lines of one BLOCK verdict, or the reason an input was not decided.
+CheckResult result_from_json(const nlohmann::json &verdict)
 {
     CheckResult result;
-    TempFile stl("prusaslicer-firearm-%%%%%%%%.stl");
-    TempFile out("prusaslicer-firearm-%%%%%%%%.out");
-    TempFile err("prusaslicer-firearm-%%%%%%%%.err");
-
-    if (! its_write_stl_binary(stl.path.string().c_str(), name.c_str(), mesh.its)) {
-        result.details = _u8L("could not write the temporary STL");
-        return result;
-    }
-
-    const int timeout = checker_timeout_seconds();
-    int exit_code = -1;
-    try {
-        std::vector<std::string> args = checker.args;
-        for (const char *a : { "--json", "--units", "mm" })
-            args.emplace_back(a);
-        args.emplace_back(stl.path.string());
-        const fs::path cwd = checker.cwd.empty() ? fs::current_path() : checker.cwd;
-        bp::child child(checker.exe.string(), bp::args(args), bp::start_dir(cwd.string()),
-                        bp::std_out > out.path.string(), bp::std_err > err.path.string(), bp::std_in < bp::null
-#ifdef _WIN32
-                        , bp::windows::create_no_window   // python.exe must not flash a console under the GUI
-#endif
-                        );
-        // Polled rather than wait_for(): Boost marks wait_for unreliable.
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout);
-        while (child.running()) {
-            if (std::chrono::steady_clock::now() > deadline) {
-                child.terminate();
-                result.details = _u8L("the checker did not finish in") + " " + std::to_string(timeout) + " s";
-                return result;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        }
-        child.wait();
-        exit_code = child.exit_code();
-    } catch (const std::exception &ex) {
-        result.details = std::string(_u8L("could not start the checker")) + ": " + ex.what();
-        return result;
-    }
-
-    const std::string stdout_text = read_file(out.path);
-    // `--json` prints one object per input file; we pass exactly one.
-    nlohmann::json verdict;
-    try {
-        verdict = nlohmann::json::parse(stdout_text);
-    } catch (const std::exception &) {
-        std::string stderr_text = read_file(err.path);
-        if (stderr_text.size() > 600)
-            stderr_text = "..." + stderr_text.substr(stderr_text.size() - 600);
-        result.details = _u8L("the checker did not return a verdict") + " (" + _u8L("exit code") + " "
-                       + std::to_string(exit_code) + ")\n" + stderr_text;
-        return result;
-    }
-
     const std::string v = verdict.value("verdict", std::string());
     if (v == "ALLOW") {
         result.decided = true;
@@ -203,7 +254,6 @@ CheckResult run_checker(const CheckerCommand &checker, const TriangleMesh &mesh,
         result.details = _u8L("the checker could not read the geometry") + ": " + verdict.value("error", std::string());
         return result;
     }
-
     result.decided = true;
     result.blocked = true;
     std::ostringstream ss;
@@ -219,39 +269,97 @@ CheckResult run_checker(const CheckerCommand &checker, const TriangleMesh &mesh,
     return result;
 }
 
-CheckResult cached_check(const CheckerCommand &checker, const ModelObject &object, const ModelInstance &instance)
+// One checker run for several meshes: the Python start-up and the library load
+// (about half a second) are paid once per plate instead of once per object.
+// `--json` prints one line per input, with the path as given.
+std::vector<CheckResult> run_checker(const CheckerCommand &checker, const std::vector<TriangleMesh> &meshes,
+                                     const std::vector<std::string> &names)
 {
-    const std::string key = cache_key(object, instance.get_scaling_factor(), instance.get_mirror());
-    {
-        std::lock_guard<std::mutex> lock(s_cache_mutex);
-        if (auto it = s_cache.find(key); it != s_cache.end())
-            return it->second;
+    std::vector<CheckResult> results(meshes.size());
+    std::vector<std::unique_ptr<TempFile>> stls;
+    for (size_t i = 0; i < meshes.size(); ++ i) {
+        stls.emplace_back(std::make_unique<TempFile>("prusaslicer-firearm-%%%%%%%%.stl"));
+        if (! its_write_stl_binary(stls.back()->path.string().c_str(), names[i].c_str(), meshes[i].its)) {
+            for (CheckResult &r : results)
+                r.details = _u8L("could not write the temporary STL");
+            return results;
+        }
+    }
+    TempFile out("prusaslicer-firearm-%%%%%%%%.out");
+    TempFile err("prusaslicer-firearm-%%%%%%%%.err");
+
+    // PRUSA_FIREARM_CHECK_TIMEOUT is per object
+    const int timeout = checker_timeout_seconds() * int(std::max<size_t>(1, meshes.size()));
+    int exit_code = -1;
+    auto fail_all = [&results](const std::string &why) {
+        for (CheckResult &r : results)
+            if (! r.decided)
+                r.details = why;
+        return results;
+    };
+    try {
+        std::vector<std::string> args = checker.args;
+        for (const char *a : { "--json", "--units", "mm" })
+            args.emplace_back(a);
+        for (const auto &stl : stls)
+            args.emplace_back(stl->path.string());
+        const fs::path cwd = checker.cwd.empty() ? fs::current_path() : checker.cwd;
+        bp::child child(checker.exe.string(), bp::args(args), bp::start_dir(cwd.string()),
+                        bp::std_out > out.path.string(), bp::std_err > err.path.string(), bp::std_in < bp::null
+#ifdef _WIN32
+                        , bp::windows::create_no_window   // python.exe must not flash a console under the GUI
+#endif
+                        );
+        // Polled rather than wait_for(): Boost marks wait_for unreliable.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout);
+        while (child.running()) {
+            if (std::chrono::steady_clock::now() > deadline) {
+                child.terminate();
+                return fail_all(_u8L("the checker did not finish in") + " " + std::to_string(timeout) + " s");
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        child.wait();
+        exit_code = child.exit_code();
+    } catch (const std::exception &ex) {
+        return fail_all(std::string(_u8L("could not start the checker")) + ": " + ex.what());
     }
 
-    // Model parts merged with their volume transforms, then the instance
-    // scaling / mirroring: the shape that would actually be printed.
-    TriangleMesh mesh = object.raw_mesh();
-    instance.transform_mesh(&mesh, true);
-    BOOST_LOG_TRIVIAL(info) << "Firearm gate: checking \"" << object.name << "\" (" << mesh.facets_count() << " facets)";
-    const auto  t0     = std::chrono::steady_clock::now();
-    CheckResult result = run_checker(checker, mesh, object.name);
-    const double secs  = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-    BOOST_LOG_TRIVIAL(info) << "Firearm gate: \"" << object.name << "\" -> "
-                            << (! result.decided ? "FAILED" : result.blocked ? "BLOCK" : "ALLOW") << " in " << secs << " s";
-
-    if (result.decided) {
-        // Failures are not cached, so fixing the checker takes effect at the next plate change.
-        std::lock_guard<std::mutex> lock(s_cache_mutex);
-        if (s_cache.size() >= s_cache_limit)
-            s_cache.clear();
-        s_cache[key] = result;
+    // one JSON object per line; match them to the inputs by file name (unique
+    // random names; the checker may normalise the directory part differently)
+    std::unordered_map<std::string, size_t> index;
+    for (size_t i = 0; i < stls.size(); ++ i)
+        index[stls[i]->path.filename().string()] = i;
+    std::vector<bool> answered(meshes.size(), false);
+    std::istringstream lines(read_file(out.path));
+    for (std::string line; std::getline(lines, line); ) {
+        if (line.find('{') == std::string::npos)
+            continue;
+        try {
+            const nlohmann::json verdict = nlohmann::json::parse(line);
+            if (auto it = index.find(fs::path(verdict.value("path", std::string())).filename().string()); it != index.end()) {
+                results[it->second]  = result_from_json(verdict);
+                answered[it->second] = true;
+            }
+        } catch (const std::exception &) {
+        }
     }
-    return result;
+    if (std::find(answered.begin(), answered.end(), false) != answered.end()) {
+        std::string stderr_text = read_file(err.path);
+        if (stderr_text.size() > 600)
+            stderr_text = "..." + stderr_text.substr(stderr_text.size() - 600);
+        const std::string why = _u8L("the checker did not return a verdict") + " (" + _u8L("exit code") + " "
+                              + std::to_string(exit_code) + ")\n" + stderr_text;
+        for (size_t i = 0; i < results.size(); ++ i)
+            if (! answered[i])
+                results[i].details = why;
+    }
+    return results;
 }
 
 } // namespace
 
-std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects)
+std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects, bool sla)
 {
     if (objects.empty())
         return {};
@@ -261,28 +369,88 @@ std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects
         return _u8L("Slicing is disabled: the firearm-part checker was not found.") + "\n"
              + _u8L("Set PRUSA_FIREARM_CHECK to the checker executable or put \"firearm-check\" on PATH.");
 
-    std::ostringstream blocked, failed;
+    // One check per object and distinct instance shape (most objects have one);
+    // cached verdicts are reused, the rest go to the checker in a single run.
+    struct Item { const ModelObject *object; const ModelInstance *instance; std::string key; };
+    std::vector<Item>                   items;
+    std::unordered_map<std::string, CheckResult> found;
+    std::vector<const Item*>            pending;
     for (const ModelObject *object : objects) {
         if (object == nullptr || object->instances.empty())
             continue;
-        // One check per distinct instance scaling; most objects have one.
-        std::vector<std::string> seen;
+        std::vector<std::string> shapes;
         for (const ModelInstance *instance : object->instances) {
-            std::ostringstream k;
-            k << instance->get_scaling_factor().transpose() << '/' << instance->get_mirror().transpose();
-            if (std::find(seen.begin(), seen.end(), k.str()) != seen.end())
+            std::string shape = instance_shape(*instance);
+            if (std::find(shapes.begin(), shapes.end(), shape) != shapes.end())
                 continue;
-            seen.emplace_back(k.str());
+            shapes.emplace_back(shape);
+            items.push_back({ object, instance, cache_key(*object, shape, sla) });
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock(s_cache_mutex);
+        for (const Item &item : items)
+            if (auto it = s_cache.find(item.key); it != s_cache.end())
+                found[item.key] = it->second;
+    }
+    for (const Item &item : items)
+        if (found.find(item.key) == found.end() &&
+            std::none_of(pending.begin(), pending.end(), [&item](const Item *p) { return p->key == item.key; }))
+            pending.emplace_back(&item);
 
-            const CheckResult r = cached_check(checker, *object, *instance);
-            if (! r.decided) {
-                failed << "  \"" << object->name << "\": " << r.details << '\n';
-                break;
+    std::vector<TriangleMesh> meshes;
+    std::vector<std::string>  names;
+    std::vector<const Item*>  sent;
+    for (const Item *item : pending) {
+        // the printed shape, then the instance scaling / skew / mirroring
+        // (re-wound when mirrored, see printed_mesh)
+        TriangleMesh mesh = printed_mesh(*item->object, sla);
+        mesh.transform(item->instance->get_matrix_no_offset(), true);
+        if (mesh.empty()) {
+            // everything cut away by negative volumes: nothing is printed
+            CheckResult nothing;
+            nothing.decided = true;
+            found[item->key] = nothing;
+            continue;
+        }
+        BOOST_LOG_TRIVIAL(info) << "Firearm gate: checking \"" << item->object->name << "\" (" << mesh.facets_count() << " facets)";
+        meshes.emplace_back(std::move(mesh));
+        names.emplace_back(item->object->name);
+        sent.emplace_back(item);
+    }
+    pending = std::move(sent);
+    if (! pending.empty()) {
+        const auto t0 = std::chrono::steady_clock::now();
+        const std::vector<CheckResult> results = run_checker(checker, meshes, names);
+        BOOST_LOG_TRIVIAL(info) << "Firearm gate: " << pending.size() << " object(s) checked in "
+                                << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s";
+        std::lock_guard<std::mutex> lock(s_cache_mutex);
+        for (size_t i = 0; i < pending.size(); ++ i) {
+            const CheckResult &r = results[i];
+            BOOST_LOG_TRIVIAL(info) << "Firearm gate: \"" << pending[i]->object->name << "\" -> "
+                                    << (! r.decided ? "FAILED" : r.blocked ? "BLOCK" : "ALLOW");
+            found[pending[i]->key] = r;
+            // Failures are not cached, so fixing the checker takes effect at the next plate change.
+            if (r.decided) {
+                if (s_cache.size() >= s_cache_limit)
+                    s_cache.clear();
+                s_cache[pending[i]->key] = r;
             }
-            if (r.blocked) {
-                blocked << "  \"" << object->name << "\"\n" << r.details;
-                break;
-            }
+        }
+    }
+
+    std::ostringstream blocked, failed;
+    std::vector<const ModelObject*> reported;
+    for (const Item &item : items) {
+        if (std::find(reported.begin(), reported.end(), item.object) != reported.end())
+            continue;
+        const CheckResult &r = found[item.key];
+        if (! r.decided) {
+            failed << "  \"" << item.object->name << "\": " << r.details << '\n';
+            reported.emplace_back(item.object);
+        } else if (r.blocked) {
+            blocked << "  \"" << item.object->name << "\"\n" << r.details;
+            reported.emplace_back(item.object);
         }
     }
 

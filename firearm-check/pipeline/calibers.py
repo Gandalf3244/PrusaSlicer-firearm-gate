@@ -92,12 +92,21 @@ GENERIC_TOL = 0.15
 METRIC_SIZES = [float(x) for x in (1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 25)]
 
 
-def bore_match(d_mm: float) -> str | None:
+BORE_LONG_L = 100.0      # mm: a bullet-diameter hole this long is a barrel even at a metric size
+
+
+def bore_match(d_mm: float, length_mm: float = 0.0) -> str | None:
     """Bullet-diameter match for a *long* hole. Metric rod sizes are refused
-    (an 8 mm linear-rod bore in a printer carriage is >= 25 mm long too)."""
+    (an 8 mm linear-rod bore in a printer carriage is >= 25 mm long too),
+    except for bores >= BORE_LONG_L: a rifle barrel's land or groove diameter
+    can be a round metric size (M4 5.56 lands = 5.55 mm, 7.62x39 grooves =
+    7.98 mm) and no printed bracket carries a 100 mm hole at those sizes.
+    Smooth-rod sizes and their clearance fits stay refused at any length."""
     # refuse metric rod sizes and their clearance fits (an 8.2 mm x 54 mm hole
     # is a printer's 8 mm smooth-rod bore, found on the negative set)
-    if any(abs(d_mm - m) <= BORE_METRIC_TOL for m in METRIC_SIZES):
+    if length_mm < BORE_LONG_L and any(abs(d_mm - m) <= BORE_METRIC_TOL for m in METRIC_SIZES):
+        return None
+    if any(abs(d_mm - m) <= BORE_METRIC_TOL for m in ROD_SIZES):
         return None
     if any(m <= d_mm <= m + BORE_METRIC_CLEARANCE for m in ROD_SIZES):
         return None
@@ -150,7 +159,7 @@ def classify_diameter(d_mm: float, kind: str, length_mm: float = 0.0, area_mm2: 
     a bullet diameter is generic. With `area_mm2` the bore must also be a real
     surface, not the sparse inner envelope of a coil spring."""
     if kind == "hole" and length_mm >= max(BORE_MIN_L, BORE_MIN_LD * d_mm):
-        b = bore_match(d_mm)
+        b = bore_match(d_mm, length_mm)
         if b and (area_mm2 is None or area_mm2 >= BORE_MIN_FILL * np.pi * d_mm * length_mm):
             return "bore", b
     i = interface_match(d_mm, length_mm)

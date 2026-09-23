@@ -97,7 +97,7 @@ jobs:
       - name: Prepare test parts
         shell: bash
         run: |
-          python -m pip install --quiet numpy scipy trimesh manifold3d
+          python -m pip install --quiet numpy scipy trimesh networkx manifold3d
           mkdir -p testparts
           python -c "import trimesh; trimesh.creation.box((30, 20, 10)).export('testparts/allowed_box.stl')"
           python packaging/windows/make_test_part.py firearm-check testparts/blocked.stl

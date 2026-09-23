@@ -656,7 +656,7 @@ std::string SLAPrint::validate(std::vector<std::string>*) const
         std::vector<const ModelObject*> printed;
         for (const SLAPrintObject *po : m_objects)
             printed.emplace_back(po->model_object());
-        if (std::string refusal = firearm_gate_validate(printed); ! refusal.empty())
+        if (std::string refusal = firearm_gate_validate(printed, true); ! refusal.empty())
             return refusal;
     }
 

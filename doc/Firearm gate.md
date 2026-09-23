@@ -30,16 +30,29 @@ place where PrusaSlicer decides whether a print may be processed, for the GUI,
 the CLI and G-code export alike. Both now call
 `firearm_gate_validate()` (`src/libslic3r/FirearmGate.cpp`) first:
 
-1. For every object on the bed, the model parts are merged with their volume
-   transforms and the instance's scaling / mirroring is applied (the printed
-   shape; rotation and position are irrelevant to the identification).
-2. The mesh is written to a temporary binary STL and the checker is run:
-   `firearm-check --json --units mm <stl>`. Geometry inside PrusaSlicer is
-   always millimetres, so the checker's unit inference is bypassed.
-3. The verdict line is parsed. `BLOCK` becomes the refusal above, with the
-   checker's evidence lines; `ALLOW` lets validation continue.
-4. Verdicts are cached by object geometry and scale, so moving, rotating or
-   re-validating an object costs nothing. Scaling an object re-runs the check.
+1. For every object on the bed the printed shape is built: the model parts
+   merged with their volume transforms, minus negative volumes, minus
+   modifiers that print nothing (0 perimeters and 0 % infill) and, for SLA,
+   minus drain holes (CGAL boolean; when the meshes are open or
+   self-intersecting, the removed volumes are added inside out, which gives
+   the checker the same hole walls). Then the instance's scaling, skew and
+   mirroring are applied. Mirrored volumes and instances are re-wound, so a
+   mirrored part is not checked inside out (every hole would read as a pin).
+   Rotation and position are irrelevant to the identification.
+2. Each shape is written to a temporary binary STL and the checker is run
+   once for all objects not yet checked:
+   `firearm-check --json --units mm <stl> <stl> ...`. Geometry inside
+   PrusaSlicer is always millimetres, so the checker's unit inference is
+   bypassed. One run per plate, because the checker's start-up (about half a
+   second) would otherwise be paid per object.
+3. The verdict lines are matched to the objects by file name. `BLOCK` becomes
+   the refusal above, with the checker's evidence lines; `ALLOW` lets
+   validation continue. An object without a verdict line is a failure.
+4. Verdicts are cached by the shape-defining volumes (parts, negative volumes,
+   modifiers and the options that make them void, SLA drain holes) and the
+   instance's shape (M^T M of its linear part and the mirror flag), so moving,
+   rotating or re-validating an object costs nothing. Scaling, skewing,
+   mirroring or editing a volume re-runs the check.
 
 The gate fails closed: if the checker is missing, crashes, times out or
 returns something unparseable, slicing is disabled with a message saying so.
@@ -50,7 +63,7 @@ Failures are not cached.
 | environment variable | meaning | default |
 |---|---|---|
 | `PRUSA_FIREARM_CHECK` | checker executable | a bundle at `<resources>/firearm-check/` (private Python runtime in `python/`, the pipeline in `app/`; what the Windows installer ships, see `packaging/windows/`), then `firearm-check` on `PATH`, then `~/.local/bin/firearm-check` |
-| `PRUSA_FIREARM_CHECK_TIMEOUT` | seconds allowed per object | 300 |
+| `PRUSA_FIREARM_CHECK_TIMEOUT` | seconds allowed per object (a run over n objects gets n times this) | 300 |
 
 `firearm-check` is a launcher for the detection pipeline
 (`firearm-check/`, `python -m pipeline.check`). Its measured accuracy (538

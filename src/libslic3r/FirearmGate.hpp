@@ -27,7 +27,10 @@ class ModelObject;
 // Fails closed: when the checker cannot be run, the refusal says so.
 // Results are cached per object geometry and scale, so repeated calls
 // (Print::validate() runs after every plate change) are free.
-std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects);
+// The shape checked is the one that would be printed: model parts minus
+// negative volumes and void modifiers (and, with `sla`, minus drain holes),
+// mirrored parts wound the right way out.
+std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects, bool sla = false);
 
 } // namespace Slic3r
 

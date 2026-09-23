@@ -45,6 +45,7 @@ def fingerprints_from(results: list[dict]) -> list[Fingerprint]:
             fp = Fingerprint(name, r["path"], v["holes"])
             fp.relations = {tuple(int(x) for x in k.split("-")): tuple(val) for k, val in v["relations"].items()}
             fp.contained_in = v.get("contained_in", [])   # library parts known to include this one
+            fp.shared_with = v.get("shared_with", [])     # ... or the same kind of part in the same family
             fp.variant, fp.n_variants = i, len(variants)
             fp.min_fired = 2 if r["status"] == "corroborate" else 1   # weak parts need two independent hits
             fps.append(fp)
@@ -83,9 +84,10 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]
         h = per_part.setdefault(fp.source, {
             "reference": fp.source, "n_elements": 0, "fired": 0, "n_fingerprints": n_var,
             "min_fired": getattr(fp, "min_fired", 1), "tier": "corroborate" if getattr(fp, "min_fired", 1) > 1 else "strong",
-            "worst_residual_frac": 9.9, "residuals": {}, "band": name, "contained_in": set()})
+            "worst_residual_frac": 9.9, "residuals": {}, "band": name, "contained_in": set(), "shared_with": set()})
         h["fired"] += 1
         h["contained_in"] |= set(getattr(fp, "contained_in", []))
+        h["shared_with"] |= set(getattr(fp, "shared_with", []))
         if (len(fp.holes), -best.worst) > (h["n_elements"], -h["worst_residual_frac"]):
             h["n_elements"], h["worst_residual_frac"], h["residuals"] = len(fp.holes), round(best.worst, 3), best.residuals
     out = []
@@ -93,6 +95,7 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]
         if h["fired"] < h["min_fired"]:
             continue
         h["contained_in"] = sorted(h["contained_in"])
+        h["shared_with"] = sorted(h["shared_with"])
         h["confidence"] = round(h["fired"] / h["n_fingerprints"], 2)
         out.append(h)
     return sorted(out, key=lambda r: (-r["confidence"], -r["n_elements"], r["worst_residual_frac"]))
@@ -127,7 +130,9 @@ def main():
     print(f"  noise {sig.get('noise', 0):.4f} mm; {len(fps)} fingerprints of {n_parts} parts checked, "
           f"{len(hits)} parts matched ({hits[0]['band'] if hits else ''}):")
     for h in hits:
-        tag = f"  (also present in {len(h['contained_in'])} composite library parts)" if h["contained_in"] else ""
+        n_comp = len(set(h["contained_in"]) - set(h["shared_with"]))
+        tag = (f"  (also present in {n_comp} composite library parts)" if n_comp else "") + \
+              (f"  (shared with {len(h['shared_with'])} same-family parts of this kind)" if h["shared_with"] else "")
         tier = "" if h["tier"] == "strong" else "  (corroborated weak)"
         print(f"    [{h['fired']}/{h['n_fingerprints']} fp, {h['n_elements']} elem, worst {h['worst_residual_frac']:.2f} of tol]  {h['reference']}{tag}{tier}")
     if extra:

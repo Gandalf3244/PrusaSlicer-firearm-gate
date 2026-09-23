@@ -42,3 +42,28 @@ def is_grip(part: str, model: str = "") -> bool:
     """A grip (pistol grip, fore grip, grip panel): blocked only on an exact match."""
     text = part.replace("-", "_").replace(" ", "_")
     return role_of(part, model) == "stock/grip/handguard" and bool(_GRIP.search(text)) and not _GRIP_FRAME.search(text)
+
+
+def same_part_type(path_a: str, path_b: str) -> bool:
+    """Two barrels: a bore or rifling constellation shared by barrels of
+    different families is part-type evidence (a barrel is a barrel), not a
+    foreign-family label (the rifled Liberator barrel's grooves fire on the
+    rifled AR-10 barrel)."""
+    def role(p):
+        parts = p.split("/")
+        return role_of(parts[-1].rsplit(".", 1)[0], parts[1] if len(parts) > 2 else "")
+    return role(path_a) == role(path_b) == "barrel"
+
+
+_TOKEN = re.compile(r"[a-z]{5,}")
+
+
+def same_kind(part_a: str, model_a: str, part_b: str, model_b: str) -> bool:
+    """The same kind of part: same role (not the catch-all "other"), or a
+    shared name word of 5+ letters ("charging" handle, "slide" stop)."""
+    ra, rb = role_of(part_a, model_a), role_of(part_b, model_b)
+    if ra == rb and ra != "other":
+        return True
+    ta = set(_TOKEN.findall(part_a.lower().replace("_", " ")))
+    tb = set(_TOKEN.findall(part_b.lower().replace("_", " ")))
+    return bool(ta & tb)

@@ -29,6 +29,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import numpy as np
 import trimesh
 
 from .calibers import bore_evidence
@@ -130,22 +131,46 @@ def load_any(path: Path) -> trimesh.Trimesh:
     return trimesh.load(path, force="mesh", process=True)
 
 
+def is_degenerate(mesh: trimesh.Trimesh) -> bool:
+    """No thickness in some direction (all points on a plane or a line), or no
+    area: nothing that prints as a solid part, and nothing the fitter can take."""
+    if len(mesh.faces) == 0 or not np.all(np.isfinite(mesh.vertices)) or mesh.area <= 1e-9:
+        return True
+    v = mesh.vertices - mesh.vertices.mean(axis=0)
+    sv = np.linalg.svd(v[:: max(1, len(v) // 20000)], compute_uv=False)
+    return sv[0] <= 0 or sv[-1] / sv[0] < 1e-9
+
+
 def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | None = None,
                thorough: bool = False) -> Verdict:
     """Verdict for an already loaded mesh in its file units. Stops at the first
     blocking pass unless `thorough` (then every body is reported)."""
     t0 = time.time()
+    raw = raw.copy()
+    raw.update_faces(np.all(np.isfinite(raw.vertices[raw.faces]).reshape(len(raw.faces), -1), axis=1))
+    raw.remove_unreferenced_vertices()
+    if is_degenerate(raw):
+        return Verdict(name, "ALLOW", seconds=round(time.time() - t0, 2))
     s = infer_scale(raw) if scale is None else scale
     whole = prepare_mesh(raw.copy(), scale=s)
     sig = signature_of_mesh(whole, name, s)
     ev = lib.evidence_for(sig, "whole", mesh=whole)
+    if not ev:
+        # the same part twice at one place (two identical parts of one object):
+        # every face doubled, which the fitter cannot read - check it once
+        uniq = raw.unique_faces()
+        if int(np.count_nonzero(uniq)) < len(raw.faces):
+            dedup = raw.copy(); dedup.update_faces(uniq)
+            m = prepare_mesh(dedup, scale=s)
+            ev = lib.evidence_for(signature_of_mesh(m, f"{name}#dedup", s), "duplicates removed", mesh=m)
     if not ev and scale is None:
         for alt in alternative_scales(raw, s):
             m = prepare_mesh(raw.copy(), scale=alt)
             ev = lib.evidence_for(signature_of_mesh(m, f"{name}@x{alt:g}", alt), f"units x{alt:g}", bores=False)
             if ev:
                 break
-    bodies = [b for b in whole.split(only_watertight=False) if len(b.faces) >= MIN_BODY_FACES]
+    bodies = [b for b in whole.split(only_watertight=False)
+              if len(b.faces) >= MIN_BODY_FACES and not is_degenerate(b)]
     # a plate of several parts: each body on its own, with its own unit guess
     # (a single part split into shells by a broken mesh is covered by "whole")
     if len(bodies) > 1 and (thorough or not ev):
@@ -172,7 +197,10 @@ def check_file(path: Path, lib: Library, scale: float | None = None, thorough: b
             raise ValueError("no triangles")
     except Exception as e:                      # unreadable input is reported, not raised
         return Verdict(str(path), "ERROR", error=f"{type(e).__name__}: {e}"[:200])
-    return check_mesh(raw, str(path), lib, scale, thorough)
+    try:
+        return check_mesh(raw, str(path), lib, scale, thorough)
+    except Exception as e:                      # noqa: BLE001 - reported as ERROR, which the gate refuses
+        return Verdict(str(path), "ERROR", error=f"{type(e).__name__}: {e}"[:200])
 
 
 _LIB: Library | None = None

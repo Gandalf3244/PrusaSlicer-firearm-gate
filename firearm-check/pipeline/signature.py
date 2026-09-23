@@ -23,8 +23,20 @@ def _r(x, n=4):
     return round(float(x), n)
 
 
+OBB_MAX_POINTS = 20000     # trimesh's exact OBB is quadratic in the hull size: 35 s for a 1.2 M
+                           # face sphere. The OBB is descriptive only (not used in any decision).
+
+
+def _obb_extents(mesh: trimesh.Trimesh) -> np.ndarray:
+    if len(mesh.vertices) <= OBB_MAX_POINTS:
+        return np.asarray(mesh.bounding_box_oriented.primitive.extents)
+    pts = mesh.vertices[:: len(mesh.vertices) // OBB_MAX_POINTS + 1]
+    _, ext = trimesh.bounds.oriented_bounds(pts)
+    return np.asarray(ext)
+
+
 def global_features(mesh: trimesh.Trimesh) -> dict:
-    obb = mesh.bounding_box_oriented.primitive.extents
+    obb = _obb_extents(mesh)
     ext = np.sort(np.asarray(obb))[::-1]
     f = {
         "obb": [_r(e, 3) for e in ext],
