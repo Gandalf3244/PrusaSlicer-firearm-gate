@@ -153,7 +153,7 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
         return Verdict(name, "ALLOW", seconds=round(time.time() - t0, 2))
     s = infer_scale(raw) if scale is None else scale
     whole = prepare_mesh(raw.copy(), scale=s)
-    sig = signature_of_mesh(whole, name, s)
+    sig = signature_of_mesh(whole, name, s, describe=False)
     ev = lib.evidence_for(sig, "whole", mesh=whole)
     if not ev:
         # the same part twice at one place (two identical parts of one object):
@@ -162,11 +162,11 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
         if int(np.count_nonzero(uniq)) < len(raw.faces):
             dedup = raw.copy(); dedup.update_faces(uniq)
             m = prepare_mesh(dedup, scale=s)
-            ev = lib.evidence_for(signature_of_mesh(m, f"{name}#dedup", s), "duplicates removed", mesh=m)
+            ev = lib.evidence_for(signature_of_mesh(m, f"{name}#dedup", s, describe=False), "duplicates removed", mesh=m)
     if not ev and scale is None:
         for alt in alternative_scales(raw, s):
             m = prepare_mesh(raw.copy(), scale=alt)
-            ev = lib.evidence_for(signature_of_mesh(m, f"{name}@x{alt:g}", alt), f"units x{alt:g}", bores=False)
+            ev = lib.evidence_for(signature_of_mesh(m, f"{name}@x{alt:g}", alt, describe=False), f"units x{alt:g}", bores=False)
             if ev:
                 break
     bodies = [b for b in whole.split(only_watertight=False)
@@ -178,7 +178,7 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
             raw_b = b.copy(); raw_b.apply_scale(1.0 / s)
             sb = infer_scale(raw_b) if scale is None else scale
             mb = prepare_mesh(raw_b, scale=sb)
-            ev += lib.evidence_for(signature_of_mesh(mb, f"{name}#body{i}", sb), f"body {i}", mesh=mb)
+            ev += lib.evidence_for(signature_of_mesh(mb, f"{name}#body{i}", sb, describe=False), f"body {i}", mesh=mb)
     # one line per distinct finding
     uniq: dict[tuple, Evidence] = {}
     for e in ev:
@@ -240,9 +240,51 @@ def format_verdict(v: Verdict, lib: Library) -> str:
     return "\n".join(lines)
 
 
+def serve(lib: Library, scale: float | None, thorough: bool) -> None:
+    """Long-running mode for a slicer: the Python start-up and the imports
+    (seconds on a slow Windows laptop) are paid once, not per check. Reads one
+    JSON request per line on stdin, {"files": [...], "out": path, "done": path},
+    writes one verdict line per file to `out`, then creates `done`. Exits at
+    end of input (the slicer closed)."""
+    import os
+    from .pool import trim_after
+
+    @trim_after
+    def handle(req: dict) -> None:
+        out, done = Path(req["out"]), Path(req["done"])
+        tmp = out.with_name(out.name + ".part")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            for f in req.get("files", []):
+                try:
+                    v = check_file(Path(f), lib, scale, thorough)
+                except Exception as e:          # noqa: BLE001 - never leave the slicer waiting
+                    v = Verdict(str(f), "ERROR", error=f"{type(e).__name__}: {e}"[:200])
+                fh.write(json.dumps(v.to_json()) + "\n")
+        os.replace(tmp, out)
+        done.touch()
+
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            req = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        try:
+            handle(req)
+        except Exception as e:                  # noqa: BLE001
+            print(f"request failed: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+            try:
+                Path(req["done"]).touch()       # the slicer then finds no verdicts and fails closed
+            except Exception:                   # noqa: BLE001
+                pass
+
+
 def main():
     ap = argparse.ArgumentParser(description="print / do-not-print decision for 3D models")
-    ap.add_argument("paths", nargs="+", help="model files or folders")
+    ap.add_argument("paths", nargs="*", help="model files or folders")
+    ap.add_argument("--serve", action="store_true", help="read check requests from stdin (for a slicer), see serve()")
     ap.add_argument("--units", choices=sorted(UNIT_SCALE), help="file units if known (default: inferred)")
     ap.add_argument("--json", action="store_true", help="one JSON object per line instead of text")
     ap.add_argument("--thorough", action="store_true", help="report every body of a plate, not just the first blocking pass")
@@ -250,6 +292,11 @@ def main():
     a = ap.parse_args()
     lib = Library()
     scale = UNIT_SCALE[a.units] if a.units else None
+    if a.serve:
+        serve(lib, scale, a.thorough)
+        return
+    if not a.paths:
+        ap.error("no model files given")
     paths = _inputs(a.paths)
     if a.workers > 1 and len(paths) > 1:
         from concurrent.futures import ProcessPoolExecutor

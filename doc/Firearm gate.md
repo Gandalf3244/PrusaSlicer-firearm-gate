@@ -39,12 +39,18 @@ the CLI and G-code export alike. Both now call
    mirroring are applied. Mirrored volumes and instances are re-wound, so a
    mirrored part is not checked inside out (every hole would read as a pin).
    Rotation and position are irrelevant to the identification.
-2. Each shape is written to a temporary binary STL and the checker is run
-   once for all objects not yet checked:
-   `firearm-check --json --units mm <stl> <stl> ...`. Geometry inside
+2. Each shape is written to a temporary binary STL and checked, all objects
+   not yet checked in one request. The checker runs as a server
+   (`firearm-check --serve --units mm`), started in the background when the
+   PrusaSlicer window opens: Python, numpy/scipy and the reference library load
+   once per session instead of once per check (seconds on a slow laptop). Each
+   request is one JSON line on its stdin (`{"files": [...], "out": ..., "done":
+   ...}`); the verdicts are written to `out`, then `done` is created. If the
+   server cannot be started, exits or does not support `--serve` (a custom
+   `PRUSA_FIREARM_CHECK` script), the gate runs the checker once per plate
+   instead: `firearm-check --json --units mm <stl> <stl> ...`. Geometry inside
    PrusaSlicer is always millimetres, so the checker's unit inference is
-   bypassed. One run per plate, because the checker's start-up (about half a
-   second) would otherwise be paid per object.
+   bypassed.
 3. The verdict lines are matched to the objects by file name. `BLOCK` becomes
    the refusal above, with the checker's evidence lines; `ALLOW` lets
    validation continue. An object without a verdict line is a failure.

@@ -16,7 +16,9 @@ from pathlib import Path
 
 import trimesh
 
-from .fingerprint import Fingerprint, match
+import numpy as np
+
+from .fingerprint import Fingerprint, elements, match
 from .signature import global_features, primitive_features
 from .primitives import segment
 from .tolerances import LOOSE, TIGHT
@@ -58,12 +60,14 @@ def signature_of_file(stl: Path) -> dict:
     return signature_of_mesh(load_mesh(stl), str(stl), scale)
 
 
-def signature_of_mesh(mesh: trimesh.Trimesh, name: str, scale: float = 1.0) -> dict:
-    """Signature of a mesh already prepared by units.prepare_mesh (mm, repaired)."""
+def signature_of_mesh(mesh: trimesh.Trimesh, name: str, scale: float = 1.0, describe: bool = True) -> dict:
+    """Signature of a mesh already prepared by units.prepare_mesh (mm, repaired).
+    `describe=False` skips the oriented bounding box, which is reported but
+    never used in a decision (the checker's hot path)."""
     seg = segment(mesh)
     amb = bool(mesh.metadata.get("concavity_ambiguous", False))
     sig = {"path": name, "scale": scale, "noise": round(seg.noise, 5), "concavity_ambiguous": amb}
-    sig.update(global_features(mesh))
+    sig.update(global_features(mesh, describe))
     sig.update(primitive_features(seg, amb))
     return sig
 
@@ -75,7 +79,29 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]
     kept only one region of a part still gets the label, at 1/n confidence."""
     band, name = (LOOSE, "LOOSE") if loose else (TIGHT, "TIGHT")
     per_part: dict[str, dict] = {}
+    # a fingerprint can only match if each of its elements has a target element
+    # of an acceptable kind within the diameter band (fingerprint.same_kind):
+    # the same test match() starts with, on a sorted index instead of every pair
+    by_kind: dict[str, np.ndarray] = {}
+    for e in elements(sig, 0.9):
+        by_kind.setdefault(e.get("kind", "hole"), []).append(e["d"])
+    by_kind = {k: np.sort(np.asarray(v)) for k, v in by_kind.items()}
+    tol = band.diameter + 1e-9            # never tighter than same_kind's test
+
+    def possible(fh: dict) -> bool:
+        k = fh.get("kind", "hole")
+        kinds = (k, "boss" if k == "hole" else "hole") if fh.get("amb") and k in ("hole", "boss") else (k,)
+        for kk in kinds:
+            arr = by_kind.get(kk)
+            if arr is not None:
+                i = int(np.searchsorted(arr, fh["d"] - tol))
+                if i < len(arr) and arr[i] <= fh["d"] + tol:
+                    return True
+        return False
+
     for fp in fps:
+        if not all(possible(fh) for fh in fp.holes):
+            continue
         ms = match(fp, sig, band, name)
         if not ms:
             continue

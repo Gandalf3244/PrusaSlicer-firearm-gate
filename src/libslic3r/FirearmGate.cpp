@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <memory>
 #include <mutex>
@@ -269,9 +270,162 @@ CheckResult result_from_json(const nlohmann::json &verdict)
     return result;
 }
 
-// One checker run for several meshes: the Python start-up and the library load
-// (about half a second) are paid once per plate instead of once per object.
-// `--json` prints one line per input, with the path as given.
+// Verdict lines (one JSON object per line) matched to the inputs by file name:
+// the names are unique and random, and the checker may normalise the directory
+// part differently. Inputs without a line get `missing` as the failure reason.
+void parse_verdicts(const std::string &text, const std::vector<std::unique_ptr<TempFile>> &stls,
+                    std::vector<CheckResult> &results, const std::string &missing)
+{
+    std::unordered_map<std::string, size_t> index;
+    for (size_t i = 0; i < stls.size(); ++ i)
+        index[stls[i]->path.filename().string()] = i;
+    std::vector<bool> answered(results.size(), false);
+    std::istringstream lines(text);
+    for (std::string line; std::getline(lines, line); ) {
+        if (line.find('{') == std::string::npos)
+            continue;
+        try {
+            const nlohmann::json verdict = nlohmann::json::parse(line);
+            if (auto it = index.find(fs::path(verdict.value("path", std::string())).filename().string()); it != index.end()) {
+                results[it->second]  = result_from_json(verdict);
+                answered[it->second] = true;
+            }
+        } catch (const std::exception &) {
+        }
+    }
+    for (size_t i = 0; i < results.size(); ++ i)
+        if (! answered[i])
+            results[i].details = missing;
+}
+
+std::string tail(std::string text, size_t n = 600)
+{
+    return text.size() > n ? "..." + text.substr(text.size() - n) : text;
+}
+
+// The checker kept running between checks (`--serve`): Python, numpy/scipy and
+// the reference library load once per session instead of once per check -
+// seconds on a slow laptop, where Windows also scans every DLL Python loads.
+// Any problem with it falls back to a one-shot run, so correctness never
+// depends on the server.
+struct CheckerServer
+{
+    std::mutex                     mutex;
+    std::string                    command;        // CheckerCommand::describe() it runs
+    std::string                    unsupported;    // a command whose server exited at once (no --serve)
+    std::unique_ptr<bp::opstream>  in;
+    std::unique_ptr<bp::child>     child;
+    std::unique_ptr<TempFile>      err;
+    bool                           answered_once { false };
+
+    ~CheckerServer() { stop(); }
+    void stop()
+    {
+        if (in) {
+            in->close();                           // end of input: the server exits by itself
+            in.reset();
+        }
+        if (child) {
+            boost::system::error_code ec;
+            for (int i = 0; i < 50 && child->running(ec); ++ i)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            if (child->running(ec))
+                child->terminate(ec);
+            child.reset();
+        }
+        err.reset();
+        answered_once = false;
+    }
+    bool running() { boost::system::error_code ec; return child && child->running(ec); }
+    bool start(const CheckerCommand &checker)
+    {
+        stop();
+#ifndef _WIN32
+        // a write to a server that just died must not kill the slicer with SIGPIPE
+        std::signal(SIGPIPE, SIG_IGN);
+#endif
+        try {
+            err = std::make_unique<TempFile>("prusaslicer-firearm-server-%%%%%%%%.err");
+            in  = std::make_unique<bp::opstream>();
+            std::vector<std::string> args = checker.args;
+            for (const char *a : { "--serve", "--units", "mm" })
+                args.emplace_back(a);
+            const fs::path cwd = checker.cwd.empty() ? fs::current_path() : checker.cwd;
+            child = std::make_unique<bp::child>(checker.exe.string(), bp::args(args), bp::start_dir(cwd.string()),
+                                                bp::std_in < *in, bp::std_out > bp::null, bp::std_err > err->path.string()
+#ifdef _WIN32
+                                                , bp::windows::create_no_window
+#endif
+                                                );
+            command = checker.describe();
+            return true;
+        } catch (const std::exception &ex) {
+            BOOST_LOG_TRIVIAL(warning) << "Firearm gate: checker server did not start: " << ex.what();
+            stop();
+            return false;
+        }
+    }
+};
+CheckerServer s_server;
+
+enum class ServerOutcome { Answered, Unavailable, TimedOut };
+
+// One request to the server. Unavailable: use a one-shot run instead.
+ServerOutcome server_check(const CheckerCommand &checker, const std::vector<std::unique_ptr<TempFile>> &stls,
+                           int timeout, std::string &text, std::string &why)
+{
+    std::lock_guard<std::mutex> lock(s_server.mutex);
+    const std::string command = checker.describe();
+    if (s_server.unsupported == command)
+        return ServerOutcome::Unavailable;
+    if (! s_server.running() || s_server.command != command)
+        if (! s_server.start(checker))
+            return ServerOutcome::Unavailable;
+
+    TempFile out("prusaslicer-firearm-%%%%%%%%.out");
+    TempFile done("prusaslicer-firearm-%%%%%%%%.done");
+    nlohmann::json request;
+    request["files"] = nlohmann::json::array();
+    for (const auto &stl : stls)
+        request["files"].push_back(stl->path.string());
+    request["out"]  = out.path.string();
+    request["done"] = done.path.string();
+    // ASCII only (non-ASCII escaped), whatever code page Python reads stdin with
+    *s_server.in << request.dump(-1, ' ', true) << std::endl;
+    if (! *s_server.in) {
+        s_server.stop();
+        return ServerOutcome::Unavailable;
+    }
+
+    const auto start    = std::chrono::steady_clock::now();
+    const auto deadline = start + std::chrono::seconds(timeout);
+    boost::system::error_code ec;
+    while (! fs::exists(done.path, ec)) {
+        if (! s_server.running()) {
+            // exited without answering: a checker without --serve exits at once
+            // (argument error), a crash on some input exits later
+            const bool at_once = ! s_server.answered_once &&
+                                 std::chrono::steady_clock::now() - start < std::chrono::seconds(20);
+            why = tail(read_file(s_server.err->path));
+            if (at_once)
+                s_server.unsupported = command;
+            s_server.stop();
+            return ServerOutcome::Unavailable;
+        }
+        if (std::chrono::steady_clock::now() > deadline) {
+            s_server.stop();
+            why = _u8L("the checker did not finish in") + " " + std::to_string(timeout) + " s";
+            return ServerOutcome::TimedOut;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    s_server.answered_once = true;
+    text = read_file(out.path);
+    return ServerOutcome::Answered;
+}
+
+// Several meshes, one check: through the server when it works, else one
+// checker process for all of them (`--json` prints one line per input).
 std::vector<CheckResult> run_checker(const CheckerCommand &checker, const std::vector<TriangleMesh> &meshes,
                                      const std::vector<std::string> &names)
 {
@@ -285,11 +439,26 @@ std::vector<CheckResult> run_checker(const CheckerCommand &checker, const std::v
             return results;
         }
     }
-    TempFile out("prusaslicer-firearm-%%%%%%%%.out");
-    TempFile err("prusaslicer-firearm-%%%%%%%%.err");
-
     // PRUSA_FIREARM_CHECK_TIMEOUT is per object
     const int timeout = checker_timeout_seconds() * int(std::max<size_t>(1, meshes.size()));
+
+    std::string text, why;
+    switch (server_check(checker, stls, timeout, text, why)) {
+    case ServerOutcome::Answered:
+        parse_verdicts(text, stls, results, _u8L("the checker did not return a verdict") + "\n" + why);
+        return results;
+    case ServerOutcome::TimedOut:
+        for (CheckResult &r : results)
+            r.details = why;
+        return results;
+    case ServerOutcome::Unavailable:
+        if (! why.empty())
+            BOOST_LOG_TRIVIAL(info) << "Firearm gate: checker server unavailable, one-shot run: " << why;
+        break;
+    }
+
+    TempFile out("prusaslicer-firearm-%%%%%%%%.out");
+    TempFile err("prusaslicer-firearm-%%%%%%%%.err");
     int exit_code = -1;
     auto fail_all = [&results](const std::string &why) {
         for (CheckResult &r : results)
@@ -325,39 +494,23 @@ std::vector<CheckResult> run_checker(const CheckerCommand &checker, const std::v
         return fail_all(std::string(_u8L("could not start the checker")) + ": " + ex.what());
     }
 
-    // one JSON object per line; match them to the inputs by file name (unique
-    // random names; the checker may normalise the directory part differently)
-    std::unordered_map<std::string, size_t> index;
-    for (size_t i = 0; i < stls.size(); ++ i)
-        index[stls[i]->path.filename().string()] = i;
-    std::vector<bool> answered(meshes.size(), false);
-    std::istringstream lines(read_file(out.path));
-    for (std::string line; std::getline(lines, line); ) {
-        if (line.find('{') == std::string::npos)
-            continue;
-        try {
-            const nlohmann::json verdict = nlohmann::json::parse(line);
-            if (auto it = index.find(fs::path(verdict.value("path", std::string())).filename().string()); it != index.end()) {
-                results[it->second]  = result_from_json(verdict);
-                answered[it->second] = true;
-            }
-        } catch (const std::exception &) {
-        }
-    }
-    if (std::find(answered.begin(), answered.end(), false) != answered.end()) {
-        std::string stderr_text = read_file(err.path);
-        if (stderr_text.size() > 600)
-            stderr_text = "..." + stderr_text.substr(stderr_text.size() - 600);
-        const std::string why = _u8L("the checker did not return a verdict") + " (" + _u8L("exit code") + " "
-                              + std::to_string(exit_code) + ")\n" + stderr_text;
-        for (size_t i = 0; i < results.size(); ++ i)
-            if (! answered[i])
-                results[i].details = why;
-    }
+    parse_verdicts(read_file(out.path), stls, results,
+                   _u8L("the checker did not return a verdict") + " (" + _u8L("exit code") + " "
+                   + std::to_string(exit_code) + ")\n" + tail(read_file(err.path)));
     return results;
 }
 
 } // namespace
+
+void firearm_gate_prestart()
+{
+    const CheckerCommand checker = checker_command();
+    if (checker.empty())
+        return;
+    std::lock_guard<std::mutex> lock(s_server.mutex);
+    if (! s_server.running() && s_server.unsupported != checker.describe())
+        s_server.start(checker);
+}
 
 std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects, bool sla)
 {

@@ -32,6 +32,11 @@ class ModelObject;
 // mirrored parts wound the right way out.
 std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects, bool sla = false);
 
+// Starts the checker in the background (`--serve`), so its start-up - seconds
+// on a slow machine - is over before the first object is checked. Optional:
+// firearm_gate_validate() starts it on demand.
+void firearm_gate_prestart();
+
 } // namespace Slic3r
 
 #endif // slic3r_FirearmGate_hpp_

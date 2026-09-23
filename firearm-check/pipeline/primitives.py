@@ -128,12 +128,28 @@ class Segmentation:
 # helpers
 # --------------------------------------------------------------------------- #
 def _components(n: int, pairs: np.ndarray) -> np.ndarray:
-    """Connected-component label per node given an edge list."""
+    """Connected-component label per node given an edge list. Labels are
+    numbered by each component's smallest node, exactly as scipy's
+    connected_components numbers them; this min-label propagation with
+    pointer jumping avoids building a sparse matrix per call, which cost
+    more than the labelling on the small graphs the fitter passes."""
     if len(pairs) == 0:
         return np.arange(n)
-    a = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(n, n))
-    _, labels = connected_components(a, directed=False)
-    return labels
+    a, b = pairs[:, 0], pairs[:, 1]
+    lab = np.arange(n)
+    while True:
+        la, lb = lab[a], lab[b]
+        diff = la != lb
+        if not diff.any():
+            break
+        lo, hi = np.minimum(la[diff], lb[diff]), np.maximum(la[diff], lb[diff])
+        np.minimum.at(lab, hi, lo)
+        while True:                      # pointer jumping: every node to its root
+            nxt = lab[lab]
+            if np.array_equal(nxt, lab):
+                break
+            lab = nxt
+    return np.unique(lab, return_inverse=True)[1]
 
 
 def _fit_circle_2d(p: np.ndarray) -> tuple[np.ndarray, float]:
@@ -575,7 +591,8 @@ def _split_by_concavity(ctx, faces, adj, ang, smo, min_faces):
     sign = np.einsum("ij,ij->i", radial, N) < 0
     if sign.all() or not sign.any():
         return [faces]
-    inpatch = np.isin(adj[:, 0], faces) & np.isin(adj[:, 1], faces) & (ang < smo)
+    inpatch = ctx.pairs_within(faces, adj)
+    inpatch = inpatch[ang[inpatch] < smo]
     a = np.searchsorted(faces, adj[inpatch])
     same = sign[a[:, 0]] == sign[a[:, 1]]
     lab = _components(len(faces), a[same])
@@ -585,7 +602,7 @@ def _split_by_concavity(ctx, faces, adj, ang, smo, min_faces):
 def _split_by_angle(ctx, faces, adj, ang, smo, min_faces):
     """Connected components of the patch under the next stricter dihedral
     threshold below the one it was built with."""
-    inpatch = np.isin(adj[:, 0], faces) & np.isin(adj[:, 1], faces)
+    inpatch = ctx.pairs_within(faces, adj)
     a = np.searchsorted(faces, adj[inpatch]); e_ang = ang[inpatch]
     for th in SPLIT_ANGLES_DEG:
         if np.deg2rad(th) >= smo:
@@ -607,13 +624,55 @@ class _FitContext:
         self.mesh, self.fnorm, self.farea, self.fcent = mesh, fnorm, farea, fcent
         self.crease, self.tilt2, self.sigma = crease, tilt2, sigma
         self.rel_rms, self.abs_rms, self.min_inliers = rel_rms, abs_rms, min_inliers
+        mz = mesh.metadata.get("measured_z") if isinstance(getattr(mesh, "metadata", None), dict) else None
+        self.measured = None
+        if mz is not None and len(mz):
+            mz = np.sort(np.asarray(mz, dtype=float))
+            vz = mesh.vertices[:, 2]
+            j = np.clip(np.searchsorted(mz, vz), 1, len(mz) - 1)
+            self.measured = np.minimum(np.abs(vz - mz[j - 1]), np.abs(vz - mz[j])) < 1e-6
+
+    def pairs_within(self, faces, adj):
+        """Indices (ascending) of the adjacency pairs with both faces in
+        `faces` - the same rows as np.isin(adj[:, 0], faces) &
+        np.isin(adj[:, 1], faces), in time proportional to the patch rather
+        than the mesh (the recursive splitter calls this thousands of times)."""
+        key = id(adj)
+        if getattr(self, "_adj_key", None) != key:
+            n = len(self.farea)
+            ends = np.concatenate([adj[:, 0], adj[:, 1]])
+            rows = np.concatenate([np.arange(len(adj))] * 2)
+            order = np.argsort(ends, kind="stable")
+            self._adj_rows = rows[order]
+            self._adj_ptr = np.searchsorted(ends[order], np.arange(n + 1))
+            self._adj_key, self._adj_ref = key, adj
+            self._mark = np.zeros(n, dtype=bool)
+        ptr, rows = self._adj_ptr, self._adj_rows
+        lo, hi = ptr[faces], ptr[faces + 1]
+        cnt = hi - lo
+        if cnt.sum() == 0:
+            return np.zeros(0, dtype=np.int64)
+        start = np.repeat(lo - np.concatenate([[0], np.cumsum(cnt)[:-1]]), cnt)
+        cand = rows[start + np.arange(cnt.sum())]
+        self._mark[faces] = True
+        both = self._mark[adj[cand, 0]] & self._mark[adj[cand, 1]]
+        self._mark[faces] = False
+        return np.unique(cand[both])
 
     def fit_vertices(self, faces):
         """Vertex ids used for fitting: crease vertices when the patch has
-        enough of them, else all."""
+        enough of them, else all. A mesh reconstructed from G-code layers
+        (pipeline.gcode_mesh) is measured only on its slice planes; when it
+        says so (metadata "measured_z"), the fit uses the vertices on those
+        planes and ignores the ones interpolated between them."""
         vid = np.unique(self.mesh.faces[faces])
         sel = vid[self.crease[vid]]
-        return sel if len(sel) >= max(8, 0.2 * len(vid)) else vid
+        sel = sel if len(sel) >= max(8, 0.2 * len(vid)) else vid
+        if self.measured is not None:
+            meas = sel[self.measured[sel]]
+            if len(meas) >= max(8, 0.05 * len(sel)):
+                return meas
+        return sel
 
     @property
     def pos_tol(self):
@@ -681,7 +740,8 @@ def _split_by_normal_offset(ctx: _FitContext, faces, adj, ang, smo, min_faces, g
     if evals[0] > 0.25 * evals[1]:
         return [faces]
     off = N @ axis
-    inpatch = np.isin(adj[:, 0], faces) & np.isin(adj[:, 1], faces) & (ang < smo)
+    inpatch = ctx.pairs_within(faces, adj)
+    inpatch = inpatch[ang[inpatch] < smo]
     a = np.searchsorted(faces, adj[inpatch])          # faces is sorted
     if ctx.sigma > 1e-5:
         off_s = _smooth_on_patch(off, a, 3)

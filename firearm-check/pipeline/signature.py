@@ -35,8 +35,10 @@ def _obb_extents(mesh: trimesh.Trimesh) -> np.ndarray:
     return np.asarray(ext)
 
 
-def global_features(mesh: trimesh.Trimesh) -> dict:
-    obb = _obb_extents(mesh)
+def global_features(mesh: trimesh.Trimesh, describe: bool = True) -> dict:
+    # describe=False: axis-aligned extents stand in for the oriented box (the
+    # box is descriptive only; the checker skips its cost)
+    obb = _obb_extents(mesh) if describe else np.asarray(mesh.extents)
     ext = np.sort(np.asarray(obb))[::-1]
     f = {
         "obb": [_r(e, 3) for e in ext],
