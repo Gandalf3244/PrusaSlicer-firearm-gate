@@ -1,6 +1,6 @@
 """Assemble the self-contained Windows checker that the installer ships at
     <PrusaSlicer>\\resources\\firearm-check\\
-        python\\   official embeddable CPython + numpy/scipy/trimesh (Windows wheels)
+        python\\   official embeddable CPython + numpy/scipy/trimesh/networkx (Windows wheels)
         app\\      pipeline/, data/fingerprints.json, data/family_patterns.json, scripts/sldprt2stl.py
 
     python make_checker_runtime.py <project root> <output dir> [--python 3.13]
@@ -21,7 +21,9 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-PINNED = ["numpy==2.5.3", "scipy==1.18.1", "trimesh==5.1.0"]
+# networkx: trimesh's Trimesh.split() repairs each body with fill_holes(), which needs it -
+# a plate with an open (non-watertight) body crashed the checker without it
+PINNED = ["numpy==2.5.3", "scipy==1.18.1", "trimesh==5.1.0", "networkx==3.6.1"]
 PYTHON_FTP = "https://www.python.org/ftp/python/"
 
 

@@ -90,22 +90,20 @@ jobs:
       - name: Assemble checker runtime
         run: python packaging\windows\make_checker_runtime.py firearm-check checker-runtime
 
-      # The repository ships no firearm models. The allowed part is a generated box; the
-      # blocked part comes from the GATE_TEST_BLOCKED_STL secret (base64 of an STL the checker
-      # must refuse, e.g. base64 -w0 blocked_ejector_arm.stl). Without the secret the
-      # gun-part checks are skipped with a warning.
+      # The repository ships no firearm models, so both test parts are generated: a plain
+      # box (must slice) and a box drilled with the exact hole pattern of one shipped
+      # fingerprint (must be refused; packaging/windows/make_test_part.py). Neither is a
+      # gun part; the second carries a reference part's hole constellation.
       - name: Prepare test parts
         shell: bash
-        env:
-          BLOCKED_B64: ${{ secrets.GATE_TEST_BLOCKED_STL }}
         run: |
+          python -m pip install --quiet numpy scipy trimesh manifold3d
           mkdir -p testparts
-          checker-runtime/python/python.exe -c "import trimesh; trimesh.creation.box((30, 20, 10)).export('testparts/allowed_box.stl')"
-          if [ -n "$BLOCKED_B64" ]; then
-            printf '%s' "$BLOCKED_B64" | base64 -d > testparts/blocked.stl
-          else
-            echo "::warning::secret GATE_TEST_BLOCKED_STL is not set - the gun-part refusal is not tested"
-          fi
+          python -c "import trimesh; trimesh.creation.box((30, 20, 10)).export('testparts/allowed_box.stl')"
+          python packaging/windows/make_test_part.py firearm-check testparts/blocked.stl
+          # a plate with an open (non-watertight) body: the checker splits the plate into
+          # bodies, which exercises trimesh's hole repair (needs networkx in the runtime)
+          python -c "import trimesh; a = trimesh.creation.icosphere(subdivisions=3, radius=10); a.update_faces(list(range(20, len(a.faces)))); b = trimesh.creation.box((20, 20, 20)); b.apply_translation([40, 0, 0]); trimesh.util.concatenate([a, b]).export('testparts/open_plate.stl')"
 
       - name: Test checker runtime on Windows
         shell: cmd
@@ -113,7 +111,8 @@ jobs:
           cd checker-runtime\app
           ..\python\python.exe -m pipeline.check --json --units mm ..\..\testparts\allowed_box.stl
           if errorlevel 1 ( echo expected ALLOW & exit /b 1 )
-          if not exist ..\..\testparts\blocked.stl exit /b 0
+          ..\python\python.exe -m pipeline.check --json --units mm ..\..\testparts\open_plate.stl
+          if errorlevel 1 ( echo expected ALLOW for a plate with an open body & exit /b 1 )
           ..\python\python.exe -m pipeline.check --json --units mm ..\..\testparts\blocked.stl
           if not errorlevel 2 ( echo expected BLOCK & exit /b 1 )
           exit /b 0
@@ -136,7 +135,6 @@ jobs:
           %PS% --export-gcode --output allowed.gcode testparts\allowed_box.stl > allowed.txt 2>&1
           if errorlevel 1 ( type allowed.txt & exit /b 1 )
           if not exist allowed.gcode ( echo no G-code for an allowed part & exit /b 1 )
-          if not exist testparts\blocked.stl exit /b 0
           %PS% --export-gcode --output blocked.gcode testparts\blocked.stl > blocked.txt 2>&1
           if not errorlevel 1 ( echo expected refusal & type blocked.txt & exit /b 1 )
           findstr /C:"Slicing refused" blocked.txt || ( type blocked.txt & exit /b 1 )
@@ -175,7 +173,6 @@ jobs:
           if not exist "%GATED%\prusa-slicer-console.exe" ( echo gated PrusaSlicer not installed & exit /b 1 )
           reg query HKLM\Software\Classes\Prusa.Slicer.1\Shell\Open\Command | findstr /C:"PrusaSlicer-FirearmGate" || ( echo .3mf/.stl not associated & exit /b 1 )
 
-          if not exist testparts\blocked.stl exit /b 0
           "%GATED%\prusa-slicer-console.exe" --export-gcode --output installed.gcode testparts\blocked.stl > installed.txt 2>&1
           if not errorlevel 1 ( echo installed copy did not refuse & type installed.txt & exit /b 1 )
           findstr /C:"Slicing refused" installed.txt || ( type installed.txt & exit /b 1 )

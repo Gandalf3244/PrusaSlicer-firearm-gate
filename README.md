@@ -78,10 +78,11 @@ the checker ships as code plus two JSON files of dimensional fingerprints (hole
 diameters, spacings and angles), not part geometry.
 
 Each installer is tested before it is published: the workflow runs the staged
-`prusa-slicer-console.exe` on a known gun part (refused, exit 1, no G-code) and on
-a plain part (sliced), then installs it over fake stock PrusaSlicer installs and
-checks they are removed. The gun part comes from a repository secret; this
-repository contains no firearm models.
+`prusa-slicer-console.exe` on a part carrying a reference part's hole pattern
+(refused, exit 1, no G-code) and on a plain part (sliced), then installs it over
+fake stock PrusaSlicer installs and checks they are removed. Both test parts are
+generated during the run (the refused one is a plain block drilled with one
+fingerprint's holes), so this repository contains no firearm models.
 
 The installer is built by the
 [Windows installer workflow](.github/workflows/build_windows_installer.yml): every
