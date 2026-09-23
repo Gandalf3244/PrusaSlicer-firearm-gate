@@ -35,7 +35,7 @@ Verdicts are cached by geometry and scale, so moving or rotating an object is fr
 
 The checker ([firearm-check/](firearm-check/)) is a small Python pipeline: it fits
 planes, cylinders and cones to the mesh, and matches the resulting constellation of
-holes and bosses against 1004 fingerprints of 538 reference parts plus per-platform
+holes and bosses against 1065 fingerprints of 552 reference parts plus per-platform
 patterns. Any of four kinds of evidence blocks a print:
 
 | level | meaning |
@@ -46,7 +46,7 @@ patterns. Any of four kinds of evidence blocks a print:
 | bore | a long hole at a printed-gun bullet diameter that runs the whole length of the part (a barrel) |
 
 Grips block only on an exact match of a reference grip (many harmless handles
-share a grip's screw holes). Measured on the reference library: 538/538 parts
+share a grip's screw holes). Measured on the reference library: 552/552 parts
 identified, 0 false positives on 511 non-gun files. Details, the JSON contract and the environment variables are in
 [doc/Firearm gate.md](doc/Firearm%20gate.md).
 
