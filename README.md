@@ -44,6 +44,7 @@ patterns. Any of four kinds of evidence blocks a print:
 | lineage | the same at loose tolerance: a derivative or re-export of a known design |
 | platform | a firearm-family interface is present (e.g. the AR-15 fire-control pocket) |
 | bore | a long hole at a printed-gun bullet diameter that runs the whole length of the part (a barrel) |
+<img width="2496" height="1598" alt="sheet" src="https://github.com/user-attachments/assets/70223c91-b1d7-4482-b9f5-48a88a378748" />
 
 Grips block only on an exact match of a reference grip (many harmless handles
 share a grip's screw holes). Measured on the reference library: 552/552 parts
