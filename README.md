@@ -23,7 +23,13 @@ checker is missing or broken, slicing is disabled with a message saying so.
 
 https://github.com/user-attachments/assets/7816469c-1ee4-42ed-b2d4-52e3a621982c
 
-Also on YouTube: [PrusaSlicer firearm-part gate demonstration](https://youtu.be/ri56BqrvPNU). \n
+Also on YouTube: [PrusaSlicer firearm-part gate demonstration](https://youtu.be/ri56BqrvPNU). 
+
+
+
+
+
+
 <img width="1907" height="1060" alt="image" src="https://github.com/user-attachments/assets/fd426084-3fa7-45ae-a506-8ba675d99948" />
 
 ## How it works
