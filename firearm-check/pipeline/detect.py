@@ -18,7 +18,7 @@ import trimesh
 
 import numpy as np
 
-from .fingerprint import Fingerprint, elements, match
+from .fingerprint import PLUG_OVERSIZE, Fingerprint, elements, match
 from .signature import global_features, primitive_features
 from .primitives import segment
 from .tolerances import LOOSE, TIGHT
@@ -84,7 +84,7 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]
     # the same test match() starts with, on a sorted index instead of every pair
     by_kind: dict[str, np.ndarray] = {}
     for e in elements(sig, 0.9):
-        by_kind.setdefault(e.get("kind", "hole"), []).append(e["d"])
+        by_kind.setdefault("plug" if e.get("plug") else e.get("kind", "hole"), []).append(e["d"])
     by_kind = {k: np.sort(np.asarray(v)) for k, v in by_kind.items()}
     tol = band.diameter + 1e-9            # never tighter than same_kind's test
 
@@ -97,6 +97,11 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]
                 i = int(np.searchsorted(arr, fh["d"] - tol))
                 if i < len(arr) and arr[i] <= fh["d"] + tol:
                     return True
+        arr = by_kind.get("plug") if k == "hole" else None     # plug stand-ins: d .. d + PLUG_OVERSIZE
+        if arr is not None:
+            i = int(np.searchsorted(arr, fh["d"] - tol))
+            if i < len(arr) and arr[i] <= fh["d"] + PLUG_OVERSIZE + tol:
+                return True
         return False
 
     for fp in fps:

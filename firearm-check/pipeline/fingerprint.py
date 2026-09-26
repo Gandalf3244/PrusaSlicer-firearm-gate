@@ -29,6 +29,7 @@ from .tolerances import Band, TIGHT
 # --------------------------------------------------------------------------- #
 LINE_KINDS = {"hole", "boss", "cone"}
 MIN_ELEMENT_D = 1.0      # mm
+PLUG_OVERSIZE = 0.4      # mm: a hole stand-in (check's plug pass) may be this much wider than the hole
 SLAB_KINDS = {"slot", "wall"}
 
 
@@ -147,7 +148,12 @@ def same_kind(e1: dict, e2: dict, band: Band) -> bool:
         # extra ways to match, that would be a false-positive path.
         if not ({k1, k2} == {"hole", "boss"} and e2.get("amb")):
             return False
-    if abs(e1["d"] - e2["d"]) > band.diameter:
+    if e1.get("plug"):
+        # a pin fused into a hole leaves its protruding stub: a boss at least
+        # as wide as the hole it fills (check.plug_standins)
+        if not -band.diameter <= e1["d"] - e2["d"] <= PLUG_OVERSIZE + band.diameter or k2 != "hole":
+            return False
+    elif abs(e1["d"] - e2["d"]) > band.diameter:
         return False
     if e2.get("min_L") and e1.get("L", 0.0) < e2["min_L"] - band.length:
         return False

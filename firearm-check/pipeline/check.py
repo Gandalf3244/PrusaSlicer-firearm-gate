@@ -18,7 +18,9 @@ Decision (every rule measured on the negative set, 0/432 firings each):
     platform  family patterns present (e.g. the AR-15 fire-control pocket)
     bore      a long hole at a printed-gun bullet diameter that runs the whole
               length of the part (a barrel; calibers.bore_evidence)
-Any of them -> BLOCK. Otherwise ALLOW.
+Any of them -> BLOCK. Otherwise ALLOW. When nothing is found, the constellations
+are tried once more with plugged holes undone (plug_standins: a pin fused into
+a hole to be drilled out after printing leaves its protruding stub).
 """
 from __future__ import annotations
 
@@ -42,6 +44,7 @@ from .units import UNIT_SCALE, infer_scale, prepare_mesh
 ROOT = Path(__file__).resolve().parents[1]
 MESH_SUFFIXES = {".stl", ".3mf", ".obj", ".ply", ".off", ".glb", ".gltf", ".sldprt"}
 MIN_BODY_FACES = 200        # smaller bodies are supports, text, debris
+PLUG_COAXIAL = (1.0, 0.1)   # deg, mm: a boss this close to a real hole's axis is not a hole plug
 PLAUSIBLE_MM = (8.0, 1500.0)   # largest extent of a printable gun part, after scaling
 
 
@@ -122,6 +125,47 @@ class Library:
 _LEVEL_RANK = {"design": 0, "lineage": 1, "platform": 2, "bore": 3}
 
 
+def plug_standins(sig: dict) -> dict | None:
+    """The signature with every full-circle boss also offered as a hole on the
+    same axis, or None when there is no boss. A part printed with pins fused
+    into its holes (drilled out afterwards) has lost those holes' walls; what
+    is left is each pin's stub, a boss at least as wide as the hole
+    (fingerprint.same_kind accepts a hole d .. d + PLUG_OVERSIZE narrower).
+    Measured with scripts/removable_decoys.py (plugs) and on the negatives."""
+    from .fingerprint import MIN_ELEMENT_D, hole_relation
+    # a pin fills its hole along the whole axis: a boss on the axis of a real
+    # hole is a pad / washer seat around that hole (on every printer part; a
+    # Voron joint's 7.8 mm pad around a 5.2 mm hole read as a counterbore), not a plug
+    real = [h for h in sig["holes"] if h["d"] >= MIN_ELEMENT_D]
+
+    def coaxial(a, b):
+        ang, sep = hole_relation(a, b)
+        return ang <= PLUG_COAXIAL[0] and sep <= PLUG_COAXIAL[1]
+    extra = []
+    # one pin fills one hole: of coaxial bosses (stub + head, a stepped shaft)
+    # only the narrowest stands in - two would read as a counterbore
+    for b in sorted(sig.get("bosses", []), key=lambda b: b["d"]):
+        if (b["cov"] >= 0.9 and b["d"] >= MIN_ELEMENT_D and not any(coaxial(b, h) for h in real)
+                and not any(coaxial(b, e) for e in extra)):
+            extra.append({**b, "kind": "hole", "plug": True})
+    if not extra:
+        return None
+    out = {k: v for k, v in sig.items() if k != "_elements_cache"}
+    out["holes"] = sig["holes"] + extra
+    return out
+
+
+def _unplugged(lib: "Library", sig: dict, body: str, mesh) -> list[Evidence]:
+    ps = plug_standins(sig)
+    if ps is None:
+        return []
+    # a bore needs a real hole; and a stand-in's diameter is a range, so only
+    # design-level (TIGHT) constellations and platform patterns count, no lineage
+    ev = lib.evidence_for(ps, f"{body}, hole plugs undone" if body != "whole" else "hole plugs undone",
+                          bores=False, mesh=mesh)
+    return [e for e in ev if e.level != "lineage"]
+
+
 def load_any(path: Path) -> trimesh.Trimesh:
     if path.suffix.lower() == ".sldprt":
         sys.path.insert(0, str(ROOT / "scripts"))
@@ -169,6 +213,8 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
             ev = lib.evidence_for(signature_of_mesh(m, f"{name}@x{alt:g}", alt, describe=False), f"units x{alt:g}", bores=False)
             if ev:
                 break
+    if not ev:
+        ev = _unplugged(lib, sig, "whole", whole)
     bodies = [b for b in whole.split(only_watertight=False)
               if len(b.faces) >= MIN_BODY_FACES and not is_degenerate(b)]
     # a plate of several parts: each body on its own, with its own unit guess
@@ -178,7 +224,9 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
             raw_b = b.copy(); raw_b.apply_scale(1.0 / s)
             sb = infer_scale(raw_b) if scale is None else scale
             mb = prepare_mesh(raw_b, scale=sb)
-            ev += lib.evidence_for(signature_of_mesh(mb, f"{name}#body{i}", sb, describe=False), f"body {i}", mesh=mb)
+            sb_sig = signature_of_mesh(mb, f"{name}#body{i}", sb, describe=False)
+            ev_b = lib.evidence_for(sb_sig, f"body {i}", mesh=mb)
+            ev += ev_b or _unplugged(lib, sb_sig, f"body {i}", mb)
     # one line per distinct finding
     uniq: dict[tuple, Evidence] = {}
     for e in ev:
