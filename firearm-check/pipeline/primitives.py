@@ -208,6 +208,7 @@ K_NOISE = 3.0            # thresholds are k-sigma
 COP_MAX_DEG = 5.0        # cap on the noise-widened coplanar threshold
 WILD_TILT = 0.1          # rad: a face whose noise tilt exceeds this is orientation-less
 NOISE_FLOOR = 1e-3       # mm: below this the mesh is treated as CAD-native
+FRACTION_TIE = 1e-9      # slack on boundary-length fractions (pose-independent ties)
 
 
 def _plane_residual(verts: np.ndarray) -> np.ndarray:
@@ -478,7 +479,10 @@ def _segment_once(
     for side in (fa, fb):
         np.add.at(tot, side[between], elen[between])
         np.add.at(smth, side[smooth_nonzero], elen[smooth_nonzero])
-    curved_facet = np.divide(smth, tot, out=np.zeros(n_facets), where=tot > 0) > 0.5
+    # exact ties are common (a flat quad with two smooth and two sharp sides of
+    # equal length) and would be decided by float rounding of the pose: 0.5 in
+    # the file's frame, 0.5000000000000001 rotated. A tie is flat, in every pose.
+    curved_facet = np.divide(smth, tot, out=np.zeros(n_facets), where=tot > 0) > 0.5 + FRACTION_TIE
     # 2b. planarity: a facet that merged across a fine cylinder under the
     # widened threshold is not flat -> curved
     if sigma > 1e-5:
