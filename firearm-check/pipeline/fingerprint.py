@@ -77,30 +77,25 @@ def slab_elements(sig: dict, min_area: float = 20.0, d_range=(1.0, 60.0), max_ou
     if len(planes) < 2:
         return []
     N = np.array([p["n"] for p in planes]); P = np.array([p["p"] for p in planes])
-    # canonical normal (sign-folded) for grouping parallel planes
+    # sign of a slab's normal: fixed by the pair's first plane (relations use
+    # |a1 . a2| and |d . a|, so the sign never matters). Pairs are tested
+    # directly: grouping by normals rounded to 0.01 split anti-parallel pairs
+    # that straddled a rounding step, which depends on the pose.
     flip = np.array([1 if n[np.argmax(np.abs(n))] > 0 else -1 for n in N])
-    key = np.round(N * flip[:, None], 2)
-    groups: dict[tuple, list[int]] = {}
-    for i, k in enumerate(map(tuple, key)):
-        groups.setdefault(k, []).append(i)
+    anti = N @ N.T <= -0.999                             # anti-parallel normals
     out = []
-    for idx in groups.values():
-        for ii in range(len(idx)):
-            for jj in range(ii + 1, len(idx)):
-                i, j = idx[ii], idx[jj]
-                if N[i] @ N[j] > -0.999:                 # need anti-parallel normals
-                    continue
-                sep = float((P[j] - P[i]) @ N[i])        # >0: i's normal points at j (facing)
-                d = abs(sep)
-                if not d_range[0] <= d <= d_range[1]:
-                    continue
-                kind = "slot" if sep > 0 else "wall"
-                a = N[i] * flip[i]
-                c = 0.5 * (P[i] + P[j])
-                c = c - (c @ a) * a + ((P[i] @ a) + 0.5 * sep * (N[i] @ a)) * a   # exact mid-plane
-                out.append({"kind": kind, "d": round(d, 3), "L": round(max(min(planes[i]["ext"]), min(planes[j]["ext"])), 2),
-                            "cov": 1.0, "area": round(min(planes[i]["area"], planes[j]["area"]), 1),
-                            "c": [round(float(x), 3) for x in c], "a": [round(float(x), 5) for x in a]})
+    for i, j in zip(*np.nonzero(np.triu(anti, 1))):
+        sep = float((P[j] - P[i]) @ N[i])            # >0: i's normal points at j (facing)
+        d = abs(sep)
+        if not d_range[0] <= d <= d_range[1]:
+            continue
+        kind = "slot" if sep > 0 else "wall"
+        a = N[i] * flip[i]
+        c = 0.5 * (P[i] + P[j])
+        c = c - (c @ a) * a + ((P[i] @ a) + 0.5 * sep * (N[i] @ a)) * a   # exact mid-plane
+        out.append({"kind": kind, "d": round(d, 3), "L": round(max(min(planes[i]["ext"]), min(planes[j]["ext"])), 2),
+                    "cov": 1.0, "area": round(min(planes[i]["area"], planes[j]["area"]), 1),
+                    "c": [round(float(x), 3) for x in c], "a": [round(float(x), 5) for x in a]})
     out.sort(key=lambda e: -e["area"])
     return out[:max_out]
 

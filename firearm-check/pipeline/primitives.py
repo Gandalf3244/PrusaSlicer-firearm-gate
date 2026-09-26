@@ -182,6 +182,31 @@ def _robust_circle(p: np.ndarray, iters: int = 4, k: float = 3.0):
     return c, float(r), mask, float(np.sqrt(np.mean(res ** 2)))
 
 
+def _rect_extents(q: np.ndarray) -> np.ndarray:
+    """Side lengths (descending) of the minimum-area rectangle around 2D
+    points: independent of the in-plane basis, which _basis_perp picks from
+    the normal's coordinates and so turns with the pose (an axis-aligned box
+    in a rotated plane read 17.8 mm in one pose, 67 mm in another)."""
+    if len(q) < 3:
+        e = q.max(0) - q.min(0) if len(q) else np.zeros(2)
+        return np.sort(e)[::-1]
+    try:
+        from scipy.spatial import ConvexHull
+        h = q[ConvexHull(q).vertices]
+    except Exception:                          # collinear / degenerate
+        h = q
+    d = np.roll(h, -1, axis=0) - h
+    d = d[np.linalg.norm(d, axis=1) > 1e-12]
+    if len(d) == 0:
+        return np.zeros(2)
+    d /= np.linalg.norm(d, axis=1)[:, None]
+    a = h @ d.T                                 # along each edge direction
+    b = h @ np.column_stack([-d[:, 1], d[:, 0]]).T
+    ea, eb = a.max(0) - a.min(0), b.max(0) - b.min(0)
+    k = int(np.argmin(ea * eb))
+    return np.sort([ea[k], eb[k]])[::-1]
+
+
 def _basis_perp(a: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     h = np.array([1.0, 0, 0]) if abs(a[0]) < 0.9 else np.array([0, 1.0, 0])
     u = np.cross(a, h); u /= np.linalg.norm(u)
@@ -521,8 +546,7 @@ def _segment_once(
         p = (fcent[faces] * w[:, None]).sum(0) / w.sum()
         verts = mesh.vertices[np.unique(mesh.faces[faces])]
         u, v = _basis_perp(n)
-        pu, pv = (verts - p) @ u, (verts - p) @ v
-        ext = np.sort([pu.max() - pu.min(), pv.max() - pv.min()])[::-1]
+        ext = _rect_extents(np.column_stack([(verts - p) @ u, (verts - p) @ v]))
         planes.append(Plane(n, p, float(w.sum()), ext, faces))
 
     # curved patches -> cylinder / cone / freeform
@@ -755,7 +779,11 @@ def _split_by_normal_offset(ctx: _FitContext, faces, adj, ang, smo, min_faces, g
     order = np.argsort(off)
     breaks = np.flatnonzero(np.diff(off[order]) > gap)
     cluster = np.zeros(len(faces), int)
-    cluster[order] = np.searchsorted(breaks, np.arange(len(faces)), side="right")
+    # sorted position p lies after the breaks b < p (break b is the gap between
+    # positions b and b+1); side="right" moved the last face before every gap
+    # into the next cluster - which face that is flips with the sign of the
+    # PCA axis, i.e. with the pose
+    cluster[order] = np.searchsorted(breaks, np.arange(len(faces)), side="left")
     if cluster.max() == 0:
         return [faces]
     same = cluster[a[:, 0]] == cluster[a[:, 1]]
