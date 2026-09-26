@@ -114,6 +114,23 @@ PrusaSlicer looks for the checker at `$PRUSA_FIREARM_CHECK`, then
 or in `~/.local/bin`. Ubuntu-specific build notes are at the end of
 [doc/Firearm gate.md](doc/Firearm%20gate.md).
 
+## On the printer: firmware for the Prusa MK4
+
+The same idea one step later, for G-code that did not come from this slicer: a build of the
+Prusa MK4 / MK4S / MK3.9 firmware (6.10.3) that reads every file before printing it and refuses
+it if it contains a known printed-gun part. It checks the layers of the G-code (holes, bosses,
+walls and slots, upright, lying flat or tilted) against the same fingerprint library, fails
+closed (a file it cannot check does not print), re-checks the file after a USB re-plug or a
+power loss, and refuses extruding moves sent over the serial line.
+
+On G-code of the reference library sliced four ways it blocks 26-33 % of the gun files printed
+flat and 11 % at random angles, and 0 of 1721 non-gun files - a second line behind the slicer
+gate, not a replacement. It has been tested in emulators (the whole firmware in Mini404, the
+checker in Renode), not yet on a real printer, and flashing it requires breaking off the MK4
+board's "appendix" (voids the warranty).
+
+Firmware file, patch, how to build and flash, and the emulator test: [firmware/](firmware/README.md).
+
 ## Layout of the fork's additions
 
 | path | what |
@@ -124,9 +141,11 @@ or in `~/.local/bin`. Ubuntu-specific build notes are at the end of
 | `firearm-check/pipeline/` | the checker (runtime only: load, fit, match, decide) |
 | `firearm-check/data/` | `fingerprints.json` (part fingerprints), `family_patterns.json` (platform patterns) |
 | `firearm-check/scripts/` | `firearm-check` launcher, `sldprt2stl.py` (SolidWorks reader) |
-| `firearm-check/tests/` | one part that must block, one that must not |
 | `packaging/windows/` | NSIS installer, checker-runtime assembler |
 | `doc/Firearm gate.md` | behaviour, configuration, latency, build notes |
+| `firmware/` | MK4 printer firmware with the check: `.bbf`, patch for Prusa-Firmware-Buddy 6.10.3 |
+| `firmware/checker/` | the G-code checker in C for the printer's board, with PC and emulator drivers |
+| `firmware/emulator/` | emulator test of the firmware (Mini404): one file printed or blocked |
 
 The reference library, the fingerprint-mining and curation tools that produce the
 two JSON files, and the accuracy reports are not in this repository; they live in
