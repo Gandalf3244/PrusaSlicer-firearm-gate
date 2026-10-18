@@ -368,6 +368,8 @@ struct Plater::priv
     std::string                 delayed_error_message;
 
     wxTimer                     background_process_timer;
+    // A background firearm check has finished: validate the unchanged print again.
+    bool                        firearm_check_done { false };
 
     std::string                 label_btn_export;
     std::string                 label_btn_send;
@@ -2566,7 +2568,10 @@ unsigned int Plater::priv::update_background_process(bool force_validation, bool
         notification_manager->set_slicing_progress_hidden();
     }
 
-    if ((invalidated != Print::APPLY_STATUS_UNCHANGED || force_validation) && ! background_process.empty()) {
+    // The verdict of a background firearm check is in: the print it refused
+    // as "being checked" may be valid now, and may be sliced in the background.
+    const bool firearm_checked = std::exchange(firearm_check_done, false);
+    if ((invalidated != Print::APPLY_STATUS_UNCHANGED || force_validation || firearm_checked) && ! background_process.empty()) {
 		// The delayed error message is no more valid.
 		delayed_error_message.clear();
 		// The state of the Print changed, and it is non-zero. Let's validate it and give the user feedback on errors.
@@ -2574,7 +2579,7 @@ unsigned int Plater::priv::update_background_process(bool force_validation, bool
         if (err.empty()) {
 			notification_manager->set_all_slicing_errors_gray(true);
             notification_manager->close_notification_of_type(NotificationType::ValidateError);
-            if (invalidated != Print::APPLY_STATUS_UNCHANGED && background_processing_enabled())
+            if ((invalidated != Print::APPLY_STATUS_UNCHANGED || firearm_checked) && background_processing_enabled())
                 return_state |= UPDATE_BACKGROUND_PROCESS_RESTART;
 
             // Pass a warning from validation and either show a notification,
@@ -7524,6 +7529,13 @@ void Plater::changed_objects(const std::vector<size_t>& object_idxs)
 
     // update print
     this->p->schedule_background_process();
+}
+
+void Plater::on_firearm_check_done()
+{
+    // through the timer, so a suppressed background process update stays suppressed
+    p->firearm_check_done = true;
+    p->schedule_background_process();
 }
 
 void Plater::schedule_background_process(bool schedule/* = true*/)

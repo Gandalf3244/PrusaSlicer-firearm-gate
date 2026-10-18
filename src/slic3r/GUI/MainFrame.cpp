@@ -32,6 +32,7 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/log/trivial.hpp>
 
+#include "libslic3r/FirearmGate.hpp"
 #include "libslic3r/Print.hpp"
 #include "libslic3r/Polygon.hpp"
 #include "libslic3r/SLAPrint.hpp"
@@ -537,6 +538,8 @@ void MainFrame::shutdown()
 
     // Stop the background thread of the removable drive manager, so that no new updates will be sent to the Plater.
     wxGetApp().removable_drive_manager()->shutdown();
+    // Stop a firearm-part check still running, and its worker thread.
+    firearm_gate_shutdown();
 	//stop listening for messages from other instances
 	wxGetApp().other_instance_message_handler()->shutdown(this);
     // Save the slic3r.ini.Usually the ini file is saved from "on idle" callback,

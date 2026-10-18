@@ -248,6 +248,8 @@ public:
     void changed_object(int obj_idx);
     void changed_objects(const std::vector<size_t>& object_idxs);
     void schedule_background_process(bool schedule = true);
+    // Called when a background firearm-part check has finished (FirearmGate.hpp).
+    void on_firearm_check_done();
     bool is_background_process_update_scheduled() const;
     void suppress_background_process(const bool stop_background_process) ;
     void send_gcode();

@@ -1680,10 +1680,19 @@ bool GUI_App::on_init_inner()
 
     m_initialized = true;
 
-    // Firearm gate: load the checker in the background while the user picks a
-    // model, so the first check does not wait for Python to start.
-    if (is_editor())
+    // Firearm gate: check in the background, so the window does not freeze while
+    // a dense mesh is reduced and checked, and load the checker while the user
+    // picks a model, so the first check does not wait for Python to start.
+    if (is_editor()) {
+        firearm_gate_set_background([]() {
+            // from the gate's worker thread: CallAfter queues it for the UI thread
+            wxGetApp().CallAfter([]() {
+                if (Plater *plater = wxGetApp().plater())
+                    plater->on_firearm_check_done();
+            });
+        });
         firearm_gate_prestart();
+    }
 
     if (const std::string& crash_reason = app_config->get("restore_win_position");
         boost::starts_with(crash_reason,"crashed"))

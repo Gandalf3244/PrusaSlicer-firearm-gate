@@ -39,6 +39,15 @@ the CLI and G-code export alike. Both now call
    mirroring are applied. Mirrored volumes and instances are re-wound, so a
    mirrored part is not checked inside out (every hole would read as a pin).
    Rotation and position are irrelevant to the identification.
+   A shape with more than 1M facets (`PRUSA_FIREARM_CHECK_MAX_FACETS`) is
+   first reduced to that by quadric edge collapse - the Simplify tool's - and
+   so are the parts and cut volumes before the boolean. The checker needs ~2 KB
+   per facet: a 17.7M-facet object took 30+ GB, was killed by the OS twice
+   (server, then the one-shot retry) and disabled slicing after minutes of
+   swapping. No reference part has more than 820k facets. Of 28 library parts
+   densified to 1.2-4.7M facets (edges split, shape unchanged), 27 are still
+   BLOCKed after the reduction; the 28th (VZ58 barrel) is already missed at
+   the dense resolution without it. 10 densified printer parts stay ALLOW.
 2. Each shape is written to a temporary binary STL and checked, all objects
    not yet checked in one request. The checker runs as a server
    (`firearm-check --serve --units mm`), started in the background when the
@@ -60,9 +69,29 @@ the CLI and G-code export alike. Both now call
    rotating or re-validating an object costs nothing. Scaling, skewing,
    mirroring or editing a volume re-runs the check.
 
+In the GUI the checks run on a worker thread, not in `validate()` itself:
+reducing and checking a dense mesh takes from seconds to a few minutes, and
+on the UI thread that froze the window. An object without a cached verdict is
+copied (its meshes are shared and immutable, so the user can go on editing the
+plate), queued, and refused meanwhile, so Slice / Export stay disabled:
+
+```
+Slicing is disabled until the firearm-part check is done. Checking:
+  "dense_part.stl" (3495496 facets; reducing a mesh this dense for the check takes a while)
+```
+
+When the verdicts are in, the worker asks the Plater to validate again
+(`Plater::on_firearm_check_done()`), which now finds them in the cache: the
+notification turns into the refusal or goes away, and background processing,
+when enabled, starts slicing. Quitting stops a check still running. The
+command line slicer checks in `validate()` as before and waits for the verdict.
+
 The gate fails closed: if the checker is missing, crashes, times out or
-returns something unparseable, slicing is disabled with a message saying so.
-Failures are not cached.
+returns something unparseable, slicing is disabled with a message saying so. A
+server killed by the OS mid-check (out of memory) is not retried as a one-shot
+run, which would only be killed again.
+Failures are not cached: the next validation checks again (in the GUI, once
+the failure has been shown for 30 s).
 
 ## Configuration
 
@@ -70,6 +99,7 @@ Failures are not cached.
 |---|---|---|
 | `PRUSA_FIREARM_CHECK` | checker executable | a bundle at `<resources>/firearm-check/` (private Python runtime in `python/`, the pipeline in `app/`; what the Windows installer ships, see `packaging/windows/`), then `firearm-check` on `PATH`, then `~/.local/bin/firearm-check` |
 | `PRUSA_FIREARM_CHECK_TIMEOUT` | seconds allowed per object (a run over n objects gets n times this) | 300 |
+| `PRUSA_FIREARM_CHECK_MAX_FACETS` | largest mesh handed to the checker; denser objects are reduced to it first (minimum 10000) | 1000000 |
 
 `firearm-check` is a launcher for the detection pipeline
 (`firearm-check/`, `python -m pipeline.check`). Its measured accuracy (560

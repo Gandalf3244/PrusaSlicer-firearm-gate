@@ -9,6 +9,7 @@
 #ifndef slic3r_FirearmGate_hpp_
 #define slic3r_FirearmGate_hpp_
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -31,6 +32,18 @@ class ModelObject;
 // negative volumes and void modifiers (and, with `sla`, minus drain holes),
 // mirrored parts wound the right way out.
 std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects, bool sla = false);
+
+// GUI: check in the background instead of on the calling (UI) thread. Then
+// firearm_gate_validate() never waits for the checker: an object without a
+// verdict yet is refused as "being checked" and queued, and `on_checked` is
+// called - from the worker thread - each time verdicts come in, so the
+// caller can validate again. A failed check is shown for 30 s before the
+// next validation checks it again.
+void firearm_gate_set_background(std::function<void()> on_checked);
+
+// Stops a background check still running (the checker process, the mesh
+// reduction) and the worker thread. Call before the application quits.
+void firearm_gate_shutdown();
 
 // Starts the checker in the background (`--serve`), so its start-up - seconds
 // on a slow machine - is over before the first object is checked. Optional:

@@ -46,6 +46,15 @@ MESH_SUFFIXES = {".stl", ".3mf", ".obj", ".ply", ".off", ".glb", ".gltf", ".sldp
 MIN_BODY_FACES = 200        # smaller bodies are supports, text, debris
 PLUG_COAXIAL = (1.0, 0.1)   # deg, mm: a boss this close to a real hole's axis is not a hole plug
 PLAUSIBLE_MM = (8.0, 1500.0)   # largest extent of a printable gun part, after scaling
+# Peak memory per face, measured on 1-18M-face STLs: loading (9.4 GB for 17.7M
+# faces) and the whole check (8.1 GB for 4.4M). A mesh that would not fit in
+# free memory is an ERROR (refused) instead of the process being killed by
+# the OS after the machine has swapped for minutes. PrusaSlicer reduces dense
+# objects to 1M faces before calling (FirearmGate.cpp). Decimating here with
+# fast_simplification was measured and rejected: it lost a dense AR-15 mag
+# well's fingerprints (BLOCK -> ALLOW).
+LOAD_BYTES_PER_FACE = 600
+CHECK_BYTES_PER_FACE = 2200
 
 
 def alternative_scales(raw: trimesh.Trimesh, chosen: float) -> list[float]:
@@ -166,6 +175,50 @@ def _unplugged(lib: "Library", sig: dict, body: str, mesh) -> list[Evidence]:
     return [e for e in ev if e.level != "lineage"]
 
 
+def stl_face_count(path: Path) -> int | None:
+    """Face count of a binary STL from its header (when the file size agrees), else None."""
+    try:
+        size = path.stat().st_size
+        with open(path, "rb") as fh:
+            fh.seek(80)
+            n = int.from_bytes(fh.read(4), "little")
+    except OSError:
+        return None
+    return n if size == 84 + 50 * n else None
+
+
+def available_memory() -> int | None:
+    """Bytes of memory that can be allocated without swapping, if the OS says."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class MemoryStatus(ctypes.Structure):
+                _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong)] + \
+                           [(n, ctypes.c_ulonglong) for n in ("total_phys", "avail_phys", "total_pagefile",
+                                                              "avail_pagefile", "total_virtual", "avail_virtual",
+                                                              "avail_extended_virtual")]
+            st = MemoryStatus(); st.length = ctypes.sizeof(MemoryStatus)
+            return int(st.avail_phys) if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)) else None
+        with open("/proc/meminfo") as fh:
+            for line in fh:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except Exception:                           # noqa: BLE001 - unknown: no guard
+        return None
+    return None
+
+
+def too_large(n_faces: int, bytes_per_face: int, step: str = "check") -> str | None:
+    """Why a mesh of `n_faces` cannot be checked in the free memory, or None."""
+    avail = available_memory()
+    need = n_faces * bytes_per_face
+    if avail is None or need <= 0.8 * avail:
+        return None
+    return (f"{n_faces} faces needs ~{need / 2**30:.1f} GB to {step}, {avail / 2**30:.1f} GB is free; "
+            "reduce the mesh (PrusaSlicer: Simplify)")
+
+
 def load_any(path: Path) -> trimesh.Trimesh:
     if path.suffix.lower() == ".sldprt":
         sys.path.insert(0, str(ROOT / "scripts"))
@@ -239,12 +292,17 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
 
 
 def check_file(path: Path, lib: Library, scale: float | None = None, thorough: bool = False) -> Verdict:
+    n = stl_face_count(path) if path.suffix.lower() == ".stl" else None
+    if n is not None and (why := too_large(n, LOAD_BYTES_PER_FACE, "load")):
+        return Verdict(str(path), "ERROR", error=why)
     try:
         raw = load_any(path)
         if raw.is_empty or len(raw.faces) == 0:
             raise ValueError("no triangles")
     except Exception as e:                      # unreadable input is reported, not raised
         return Verdict(str(path), "ERROR", error=f"{type(e).__name__}: {e}"[:200])
+    if why := too_large(len(raw.faces), CHECK_BYTES_PER_FACE):
+        return Verdict(str(path), "ERROR", error=why)
     try:
         return check_mesh(raw, str(path), lib, scale, thorough)
     except Exception as e:                      # noqa: BLE001 - reported as ERROR, which the gate refuses
