@@ -42,6 +42,16 @@ extern "C" {
 #ifndef GC_TILT
 #define GC_TILT 1                /* 0: no tilted cylinders (ellipse loops) */
 #endif
+#ifndef GC_SCALED
+#define GC_SCALED 1              /* 0: no scaled pass (parts resized uniformly before slicing) */
+#endif
+#ifndef GC_SCALE_LO
+#define GC_SCALE_LO 0.95f        /* uniform scales the scaled pass looks through (check.SCALE_RANGE) */
+#define GC_SCALE_HI 1.05f
+#endif
+#ifndef GC_SCALED_ALONE
+#define GC_SCALED_ALONE 3        /* elements one fingerprint needs to identify a part at a free scale */
+#endif
 
 /* capacities (RAM; each can be set at compile time, e.g. -DGC_MAX_RUN=256) */
 #ifndef GC_PATH_MAX
@@ -103,7 +113,7 @@ typedef struct {
 } gc_ptrack_t;
 typedef struct { float a[3], c[3], d, L, fill; uint8_t kind; } gc_elem_t;   /* fill: length with wall (coaxial pieces merged) */
 
-enum { GC_EV_DESIGN = 0, GC_EV_LINEAGE = 1, GC_EV_BORE = 2 };
+enum { GC_EV_DESIGN = 0, GC_EV_LINEAGE = 1, GC_EV_BORE = 2, GC_EV_SCALED = 3 };
 typedef struct { uint8_t type, fired, n; int16_t ref; float d, len; } gc_evid_t;
 
 typedef struct {

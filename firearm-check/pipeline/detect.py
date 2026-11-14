@@ -18,6 +18,7 @@ import trimesh
 
 import numpy as np
 
+from .anisotropy import axis_scales
 from .fingerprint import PLUG_OVERSIZE, Fingerprint, elements, match
 from .signature import global_features, primitive_features
 from .primitives import segment
@@ -66,18 +67,30 @@ def signature_of_mesh(mesh: trimesh.Trimesh, name: str, scale: float = 1.0, desc
     never used in a decision (the checker's hot path)."""
     seg = segment(mesh)
     amb = bool(mesh.metadata.get("concavity_ambiguous", False))
-    sig = {"path": name, "scale": scale, "noise": round(seg.noise, 5), "concavity_ambiguous": amb}
+    sig = {"path": name, "scale": scale, "noise": round(seg.noise, 5), "concavity_ambiguous": amb,
+           "stretch": axis_scales(mesh, seg)}
     sig.update(global_features(mesh, describe))
     sig.update(primitive_features(seg, amb))
     return sig
 
 
-def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]:
+SCALED_ALONE = 3   # elements a single fingerprint needs to identify a part at a free scale
+
+
+def detect(sig: dict, fps: list[Fingerprint], loose: bool = False,
+           scale_range: tuple[float, float] | None = None) -> list[dict]:
     """Labels for one signature. Every fingerprint is matched; hits are
     grouped per reference part and reported with `fired` = how many of that
     part's independent fingerprints were found (k of n): a fused input that
-    kept only one region of a part still gets the label, at 1/n confidence."""
+    kept only one region of a part still gets the label, at 1/n confidence.
+
+    `scale_range` = (lo, hi): match the references at any uniform scale in
+    that range (a part resized in the slicer). A free scale makes a
+    two-element constellation much easier to hit by chance (one ratio and an
+    angle are left), so a part then needs a fingerprint of >= SCALED_ALONE
+    elements, or two of its fingerprints at one common scale."""
     band, name = (LOOSE, "LOOSE") if loose else (TIGHT, "TIGHT")
+    lo_s, hi_s = scale_range or (1.0, 1.0)
     per_part: dict[str, dict] = {}
     # a fingerprint can only match if each of its elements has a target element
     # of an acceptable kind within the diameter band (fingerprint.same_kind):
@@ -87,6 +100,7 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]
         by_kind.setdefault("plug" if e.get("plug") else e.get("kind", "hole"), []).append(e["d"])
     by_kind = {k: np.sort(np.asarray(v)) for k, v in by_kind.items()}
     tol = band.diameter + 1e-9            # never tighter than same_kind's test
+    scaled_hits: dict[str, list] = {}     # part -> [(elements, [scale intervals])] per fired fingerprint
 
     def possible(fh: dict) -> bool:
         k = fh.get("kind", "hole")
@@ -94,10 +108,10 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]
         for kk in kinds:
             arr = by_kind.get(kk)
             if arr is not None:
-                i = int(np.searchsorted(arr, fh["d"] - tol))
-                if i < len(arr) and arr[i] <= fh["d"] + tol:
+                i = int(np.searchsorted(arr, lo_s * fh["d"] - tol))
+                if i < len(arr) and arr[i] <= hi_s * fh["d"] + tol:
                     return True
-        arr = by_kind.get("plug") if k == "hole" else None     # plug stand-ins: d .. d + PLUG_OVERSIZE
+        arr = by_kind.get("plug") if k == "hole" and scale_range is None else None     # plug stand-ins: d .. d + PLUG_OVERSIZE
         if arr is not None:
             i = int(np.searchsorted(arr, fh["d"] - tol))
             if i < len(arr) and arr[i] <= fh["d"] + PLUG_OVERSIZE + tol:
@@ -107,10 +121,11 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]
     for fp in fps:
         if not all(possible(fh) for fh in fp.holes):
             continue
-        ms = match(fp, sig, band, name)
+        ms = match(fp, sig, band, name, scale_range=scale_range)
         if not ms:
             continue
         best = min(ms, key=lambda m: m.worst)
+        scaled_hits.setdefault(fp.source, []).append((len(fp.holes), [m.scale for m in ms]))
         n_var = getattr(fp, "n_variants", 1)
         h = per_part.setdefault(fp.source, {
             "reference": fp.source, "n_elements": 0, "fired": 0, "n_fingerprints": n_var,
@@ -123,6 +138,11 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]
             h["n_elements"], h["worst_residual_frac"], h["residuals"] = len(fp.holes), round(best.worst, 3), best.residuals
     out = []
     for h in per_part.values():
+        if scale_range is not None:
+            h["fired"], h["scale"] = _common_scale(scaled_hits[h["reference"]])
+            alone = any(n >= SCALED_ALONE for n, _ in scaled_hits[h["reference"]])
+            if h["fired"] < max(h["min_fired"], 1 if alone else 2):
+                continue
         if h["fired"] < h["min_fired"]:
             continue
         h["contained_in"] = sorted(h["contained_in"])
@@ -130,6 +150,17 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False) -> list[dict]
         h["confidence"] = round(h["fired"] / h["n_fingerprints"], 2)
         out.append(h)
     return sorted(out, key=lambda r: (-r["confidence"], -r["n_elements"], r["worst_residual_frac"]))
+
+
+def _common_scale(hits: list[tuple[int, list[tuple[float, float]]]]) -> tuple[int, float]:
+    """Most fingerprints of one part that fit at one common scale, and that
+    scale. Each fingerprint may fit at several (one interval per match)."""
+    best, s_best = 0, 1.0
+    for s in sorted({iv[0] for _, ivs in hits for iv in ivs}):
+        n = sum(any(iv[0] <= s <= iv[1] for iv in ivs) for _, ivs in hits)
+        if n > best:
+            best, s_best = n, s
+    return best, round(s_best, 4)
 
 
 def main():

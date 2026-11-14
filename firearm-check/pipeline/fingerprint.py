@@ -158,6 +158,36 @@ def same_kind(e1: dict, e2: dict, band: Band) -> bool:
     return True
 
 
+def scale_interval(x: float, ref: float, tol: float, iv: tuple[float, float]) -> tuple[float, float] | None:
+    """`iv` narrowed to the uniform scales s with |x - s * ref| <= tol, or None.
+    A reference length of ~0 (coaxial axes, a line crossing a slab) says
+    nothing about the scale: it only has to stay within tol of 0."""
+    if ref < 1e-6:
+        return iv if abs(x) <= tol else None
+    lo, hi = max(iv[0], (x - tol) / ref), min(iv[1], (x + tol) / ref)
+    return (lo, hi) if lo <= hi else None
+
+
+def same_kind_scaled(e1: dict, e2: dict, band: Band, iv: tuple[float, float]) -> tuple[float, float] | None:
+    """same_kind for a target that may be the reference at a uniform scale in
+    `iv` (a slicer's scale field, shrink compensation): the scales that keep
+    the diameter within band, or None. Plug stand-ins never match scaled."""
+    k1, k2 = e1.get("kind", "hole"), e2.get("kind", "hole")
+    if e1.get("plug"):
+        return None
+    if k1 != k2 and not ({k1, k2} == {"hole", "boss"} and e2.get("amb")):
+        return None
+    iv = scale_interval(e1["d"], e2["d"], band.diameter, iv)
+    if iv is None:
+        return None
+    if e2.get("min_L") and e1.get("L", 0.0) < e2["min_L"] * iv[0] - band.length:
+        return None
+    if k1 == "cone" and not (abs(e1["half_deg"] - e2["half_deg"]) <= band.angle_deg
+                             and e1["concave"] == e2["concave"]):
+        return None
+    return iv
+
+
 def dedupe_coaxial(holes: list[dict], band: Band = TIGHT) -> list[dict]:
     """Collapse coaxial elements of equal kind/diameter (the same pin bore
     appearing in two side walls) into one element, keeping the longest."""
@@ -206,6 +236,7 @@ class Match:
     assignment: list[int]               # target hole index per fingerprint hole
     residuals: dict                     # constraint -> (value, reference, tol)
     band: str
+    scale: tuple[float, float] = (1.0, 1.0)   # uniform scales of the reference that fit (match(scale_range=...))
 
     @property
     def worst(self) -> float:
@@ -214,10 +245,15 @@ class Match:
 
 
 def match(fp: Fingerprint, target: dict, band: Band = TIGHT, band_name: str = "TIGHT",
-          min_cov: float = 0.9) -> list[Match]:
+          min_cov: float = 0.9, scale_range: tuple[float, float] | None = None) -> list[Match]:
     """All injective assignments of fp.holes onto target['holes'] satisfying
-    the diameter and pairwise-relation constraints within `band`."""
+    the diameter and pairwise-relation constraints within `band`.
+    `scale_range` = (lo, hi): the target may be the reference scaled uniformly
+    by any s in that range; every diameter and separation must then agree with
+    one common s (the feasible interval of s is narrowed per constraint)."""
     cand_holes = elements(target, min_cov)
+    if scale_range is not None:
+        return _match_scaled(fp, target, cand_holes, band, band_name, tuple(scale_range))
     # per fingerprint element: candidate target elements by kind + diameter
     cands = [[k for k, h in enumerate(cand_holes) if same_kind(h, fh, band)]
              for fh in fp.holes]
@@ -259,6 +295,69 @@ def match(fp: Fingerprint, target: dict, band: Band = TIGHT, band_name: str = "T
             assign[i] = -1
 
     rec(0)
+    return _unique_matches(matches, cand_holes)
+
+
+def _match_scaled(fp: Fingerprint, target: dict, cand_holes: list[dict], band: Band, band_name: str,
+                  scale_range: tuple[float, float]) -> list[Match]:
+    """match() with a free uniform scale: the same backtracking, carrying the
+    interval of scales every assigned element and pair still allows."""
+    cands = []
+    for fh in fp.holes:
+        c = []
+        for k, h in enumerate(cand_holes):
+            iv = same_kind_scaled(h, fh, band, scale_range)
+            if iv is not None:
+                c.append((k, iv))
+        if not c:
+            return []
+        cands.append(c)
+    n = len(fp.holes)
+    order = sorted(range(n), key=lambda i: len(cands[i]))
+    matches: list[Match] = []
+    assign = [-1] * n
+
+    def narrow(i: int, k: int, iv: tuple[float, float]) -> tuple[float, float] | None:
+        for j in range(n):
+            if assign[j] < 0 or j == i:
+                continue
+            ref_ang, ref_sep = fp.relations[(min(i, j), max(i, j))]
+            ang, sep = hole_relation(cand_holes[k], cand_holes[assign[j]])
+            if abs(ang - ref_ang) > band.angle_deg:
+                return None
+            iv = scale_interval(sep, ref_sep, band.distance, iv)
+            if iv is None:
+                return None
+        return iv
+
+    def rec(depth: int, iv: tuple[float, float]):
+        if depth == n:
+            s = 0.5 * (iv[0] + iv[1])
+            res = {}
+            for i in range(n):
+                res[f"H{i}.d"] = (cand_holes[assign[i]]["d"], s * fp.holes[i]["d"], band.diameter)
+            for (i, j), (ref_ang, ref_sep) in fp.relations.items():
+                ang, sep = hole_relation(cand_holes[assign[i]], cand_holes[assign[j]])
+                res[f"H{i}-H{j}.angle"] = (ang, ref_ang, band.angle_deg)
+                res[f"H{i}-H{j}.sep"] = (sep, s * ref_sep, band.distance)
+            matches.append(Match(fp.name, target["path"], assign.copy(), res, band_name, iv))
+            return
+        i = order[depth]
+        for k, iv_k in cands[i]:
+            if k in assign:
+                continue
+            iv2 = (max(iv[0], iv_k[0]), min(iv[1], iv_k[1]))
+            if iv2[0] > iv2[1] or (iv2 := narrow(i, k, iv2)) is None:
+                continue
+            assign[i] = k
+            rec(depth + 1, iv2)
+            assign[i] = -1
+
+    rec(0, scale_range)
+    return _unique_matches(matches, cand_holes)
+
+
+def _unique_matches(matches: list[Match], cand_holes: list[dict]) -> list[Match]:
     # coaxial duplicates in the target (both side walls) produce equivalent
     # assignments; keep one per distinct set of axis lines
     uniq, seen = [], set()

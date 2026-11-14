@@ -39,7 +39,7 @@ int main(int argc, char **argv)
         if (e->type == GC_EV_BORE)
             printf("%s\"bore: %s (d %.2f x %.0f mm)\"", i ? ", " : "", gc_bore_name(e->ref), e->d, e->len);
         else
-            printf("%s\"%s: %s %d/%d\"", i ? ", " : "", e->type == GC_EV_DESIGN ? "design" : "lineage",
+            printf("%s\"%s: %s %d/%d\"", i ? ", " : "", e->type == GC_EV_DESIGN ? "design" : e->type == GC_EV_SCALED ? "scaled" : "lineage",
                    gc_part_name(e->ref), e->fired, e->n);
     }
     printf("], \"lines\": %u, \"layers\": %u, \"sampled\": %u, \"loops\": %u, \"circles\": %u, \"cylinders\": %u, "

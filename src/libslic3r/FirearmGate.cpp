@@ -208,6 +208,51 @@ CheckInput check_input(const ModelObject &object, const ModelInstance &instance,
     return in;
 }
 
+// The rotation (with any mirroring) of a linear map: U V^T of its SVD - what is
+// left of it with every scaling and skew taken out.
+Matrix3d rotation_of(const Matrix3d &m)
+{
+    Eigen::JacobiSVD<Matrix3d> svd(m, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    return svd.matrixU() * svd.matrixV().transpose();
+}
+
+bool scales(const Transform3d &t)
+{
+    const Matrix3d m = t.matrix().block<3, 3>(0, 0);
+    return ! (m.transpose() * m).isIdentity(1e-9);
+}
+
+// The instance's scaling and skew without its rotation (and mirroring): R^T M
+// for M = R P. The checker does not depend on the pose, but its per-axis
+// stretch estimate (pipeline/anisotropy.py) assumes a stretch along the axes
+// of the mesh it gets - the object's own axes, which a rotation on the plate
+// would turn away.
+Transform3d shape_only(const Transform3d &instance)
+{
+    Transform3d t = Transform3d::Identity();
+    t.linear() = rotation_of(instance.linear()).transpose() * instance.linear();
+    return t;
+}
+
+// The same object at the size it was loaded: scaling and skew taken out of the
+// instance and of every volume (offsets kept). A part resized in the slicer -
+// uniformly or along one axis, for shrinkage or to slip past the check - moves
+// every dimension the fingerprints measure; checked at its original size it is
+// the file as designed. None when nothing is scaled.
+std::optional<CheckInput> unscaled_input(const CheckInput &in)
+{
+    bool any = scales(in.instance);
+    for (const CheckInput::Volume &v : in.volumes)
+        any = any || scales(v.matrix);
+    if (! any)
+        return std::nullopt;
+    CheckInput out = in;
+    out.instance = Transform3d::Identity();
+    for (CheckInput::Volume &v : out.volumes)
+        v.matrix.linear() = rotation_of(v.matrix.linear());
+    return out;
+}
+
 // The shape that would be printed, in object coordinates (instance transform
 // not applied): model parts minus negative volumes, void modifiers and (SLA)
 // drain holes. Mirrored volumes are re-wound so they stay right way out -
@@ -614,11 +659,13 @@ std::unordered_map<std::string, CheckResult> check_inputs(const CheckerCommand &
     std::vector<TriangleMesh>      meshes;
     std::vector<std::string>       names;
     std::vector<const CheckInput*> sent;
+    std::vector<bool>              original_size;   // the unscaled copy of a resized object
     for (const CheckInput &in : inputs) {
-        // the printed shape, then the instance scaling / skew / mirroring
-        // (re-wound when mirrored, see printed_mesh)
+        // the printed shape, then the instance scaling / skew in the object's
+        // own axes (shape_only: the rotation on the plate changes nothing the
+        // checker measures)
         TriangleMesh mesh = printed_mesh(in);
-        mesh.transform(in.instance, true);
+        mesh.transform(shape_only(in.instance), true);
         if (mesh.empty()) {
             // everything cut away by negative volumes: nothing is printed
             CheckResult nothing;
@@ -630,20 +677,43 @@ std::unordered_map<std::string, CheckResult> check_inputs(const CheckerCommand &
         meshes.emplace_back(std::move(mesh));
         names.emplace_back(in.name);
         sent.emplace_back(&in);
+        original_size.emplace_back(false);
+        // resized in the slicer: also checked at the size it was loaded
+        if (const std::optional<CheckInput> raw = unscaled_input(in)) {
+            TriangleMesh m = printed_mesh(*raw);
+            m.transform(raw->instance, true);
+            if (! m.empty()) {
+                BOOST_LOG_TRIVIAL(info) << "Firearm gate: checking \"" << in.name << "\" at its original size";
+                meshes.emplace_back(std::move(m));
+                names.emplace_back(in.name);
+                sent.emplace_back(&in);
+                original_size.emplace_back(true);
+            }
+        }
     }
     std::vector<CheckResult> results;
     if (! sent.empty()) {
         const auto t0 = std::chrono::steady_clock::now();
         results = run_checker(checker, meshes, names);
-        BOOST_LOG_TRIVIAL(info) << "Firearm gate: " << sent.size() << " object(s) checked in "
+        BOOST_LOG_TRIVIAL(info) << "Firearm gate: " << sent.size() << " mesh(es) checked in "
                                 << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s";
     }
     std::lock_guard<std::mutex> lock(s_cache_mutex);
     for (size_t i = 0; i < sent.size(); ++ i) {
-        const CheckResult &r = results[i];
-        BOOST_LOG_TRIVIAL(info) << "Firearm gate: \"" << sent[i]->name << "\" -> "
-                                << (! r.decided ? "FAILED" : r.blocked ? "BLOCK" : "ALLOW");
-        found[sent[i]->key] = r;
+        CheckResult r = results[i];
+        BOOST_LOG_TRIVIAL(info) << "Firearm gate: \"" << sent[i]->name << "\"" << (original_size[i] ? " (original size)" : "")
+                                << " -> " << (! r.decided ? "FAILED" : r.blocked ? "BLOCK" : "ALLOW");
+        if (original_size[i] && r.blocked)
+            r.details = "    " + _u8L("found at the size it was loaded (the object is scaled in PrusaSlicer):") + "\n" + r.details;
+        // either size blocking blocks; either failing fails (closed)
+        auto [it, first] = found.try_emplace(sent[i]->key, r);
+        if (! first) {
+            CheckResult &acc = it->second;
+            if (r.blocked && ! acc.blocked)
+                acc = r;
+            else if (! r.decided && acc.decided && ! acc.blocked)
+                acc = r;
+        }
     }
     for (const auto &[key, r] : found)
         if (r.decided) {
@@ -864,7 +934,8 @@ std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects
         message += _u8L("Slicing refused: the plate contains a firearm part.") + "\n"
                  + _u8L("The following object matches the reference library of printed-gun parts "
                         "(design = identical part, lineage = derivative of a known design, "
-                        "platform = firearm-family interface, bore = barrel at a bullet diameter):") + "\n"
+                        "platform = firearm-family interface, bore = barrel at a bullet diameter, "
+                        "scaled = a known part resized):") + "\n"
                  + blocked.str()
                  + _u8L("Remove it from the plate to continue.");
     if (! failed.str().empty()) {

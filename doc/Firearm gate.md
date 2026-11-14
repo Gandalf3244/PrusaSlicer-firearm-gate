@@ -35,10 +35,20 @@ the CLI and G-code export alike. Both now call
    modifiers that print nothing (0 perimeters and 0 % infill) and, for SLA,
    minus drain holes (CGAL boolean; when the meshes are open or
    self-intersecting, the removed volumes are added inside out, which gives
-   the checker the same hole walls). Then the instance's scaling, skew and
-   mirroring are applied. Mirrored volumes and instances are re-wound, so a
-   mirrored part is not checked inside out (every hole would read as a pin).
-   Rotation and position are irrelevant to the identification.
+   the checker the same hole walls). Then the instance's scaling and skew
+   are applied in the object's own axes (`shape_only`: its rotation and
+   mirroring on the plate are left out - they change nothing the checker
+   measures, and its per-axis stretch estimate assumes a stretch along the
+   axes of the mesh it gets). Mirrored volumes are re-wound, so a mirrored
+   part is not checked inside out (every hole would read as a pin).
+   **An object scaled in PrusaSlicer** (instance or volume scale other than
+   1, uniform or per axis) **is also checked at the size it was loaded**
+   (`unscaled_input`: scaling and skew taken out of the instance and every
+   volume). Either check blocking blocks; either failing fails. A 1-2 %
+   resize moves every dimension the fingerprints measure out of the
+   tolerance bands (measured: x1.02 left 6 of 40 library parts blocked before
+   the checker's own scaled pass); checked at its original size the part is
+   the file as designed, whatever scale was applied in the slicer.
    A shape with more than 1M facets (`PRUSA_FIREARM_CHECK_MAX_FACETS`) is
    first reduced to that by quadric edge collapse - the Simplify tool's - and
    so are the parts and cut volumes before the boolean. The checker needs ~2 KB

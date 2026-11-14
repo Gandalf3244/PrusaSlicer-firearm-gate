@@ -1231,6 +1231,81 @@ static int assign(const gc_state_t *s, const fp_print_t *f, const band_t *b, int
     return 0;
 }
 
+#if GC_SCALED
+/* assign() at a free uniform scale: [*lo, *hi] is the interval of scales every assigned
+   diameter and separation still allows (detect(scale_range=...) in the full checker) */
+static int scale_iv(float x, float ref, float tol, float *lo, float *hi)
+{
+    if (ref < 1e-6f) return fabsf(x) <= tol;          /* coaxial / crossing: no scale information */
+    float l = (x - tol) / ref, h = (x + tol) / ref;
+    if (l > *lo) *lo = l;
+    if (h < *hi) *hi = h;
+    return *lo <= *hi;
+}
+
+static int assign_scaled(const gc_state_t *s, const fp_print_t *f, const band_t *b, int depth, int *as,
+                         float lo, float hi, float *out)
+{
+    const fp_elem_t *fe = &FP_ELEMS[f->e0];
+    const fp_rel_t *fr = &FP_RELS[f->r0];
+    if (depth == f->n) { out[0] = lo; out[1] = hi; return 1; }
+    for (int k = 0; k < s->n_elem; k++) {
+        const gc_elem_t *e = &s->elem[k];
+        const fp_elem_t *x = &fe[depth];
+        if (e->kind != x->kind && !(x->amb && x->kind <= GC_BOSS && e->kind <= GC_BOSS)) continue;
+        float l2 = lo, h2 = hi;
+        if (!scale_iv(e->d, x->d, b->bd, &l2, &h2)) continue;
+        if (x->min_L > 0 && e->fill < x->min_L * l2 - b->blen) continue;
+        if (b->bd > BAND_TIGHT_D && f->n == 2 && e->kind <= GC_BOSS && fabsf(e->a[2]) < 0.99f) continue;
+        int ok = 1;
+        for (int i = 0; i < depth && ok; i++) {
+            if (as[i] == k) { ok = 0; break; }
+            float ang, sep;
+            relation(&s->elem[as[i]], e, &ang, &sep);
+            const fp_rel_t *r = &fr[rel_idx(i, depth, f->n)];
+            if (fabsf(ang - r->ang) > b->bang || !scale_iv(sep, r->sep, b->bsep, &l2, &h2)) ok = 0;
+        }
+        if (!ok) continue;
+        as[depth] = k;
+        if (assign_scaled(s, f, b, depth + 1, as, l2, h2, out)) return 1;
+    }
+    return 0;
+}
+
+/* Parts resized before slicing (scale field, shrink compensation): every dimension moves,
+   so nothing matches at the fixed bands. Run only when nothing else was found. A free
+   scale leaves a two-element constellation one ratio and an angle, so a part needs a
+   fingerprint of >= GC_SCALED_ALONE elements, or two of its fingerprints at one common
+   scale. TIGHT residuals after the scale, as in the full checker. */
+static void scaled_pass(gc_state_t *s)
+{
+    const band_t b = {BAND_TIGHT_D, BAND_TIGHT_SEP, BAND_TIGHT_ANG, BAND_TIGHT_LEN};
+    for (int k = 0; k < FP_N_PRINTS;) {
+        int p = FP_PRINTS[k].part, n_iv = 0, alone = 0;
+        float iv[3][2];
+        for (; k < FP_N_PRINTS && FP_PRINTS[k].part == p; k++) {
+            const fp_print_t *f = &FP_PRINTS[k];
+            int as[4];
+            if ((f->flags & GC_SKIP_ALWAYS) || n_iv >= 3) continue;
+            if (assign_scaled(s, f, &b, 0, as, GC_SCALE_LO, GC_SCALE_HI, iv[n_iv])) {
+                if (f->n >= GC_SCALED_ALONE) alone = 1;
+                n_iv++;
+            }
+        }
+        const fp_part_t *P = &FP_PARTS[p];
+        if (!n_iv || P->grip) continue;
+        int best = 0;                                   /* most fingerprints at one common scale */
+        for (int i = 0; i < n_iv; i++) {
+            int c = 0;
+            for (int j = 0; j < n_iv; j++) c += iv[j][0] <= iv[i][0] && iv[i][0] <= iv[j][1];
+            if (c > best) best = c;
+        }
+        int need = P->min_fired > (alone ? 1 : 2) ? P->min_fired : (alone ? 1 : 2);
+        if (best >= need) add_evid(s, GC_EV_SCALED, p, (uint8_t)best, P->n_variants, 0.5f * (iv[0][0] + iv[0][1]), 0);
+    }
+}
+#endif
+
 static int bore_caliber(float d, float L)
 {
     for (int i = 0; i < BORE_N_METRIC; i++)
@@ -1347,6 +1422,9 @@ void gc_finish(gc_state_t *s)
         span += hi - lo;
         if (span / extent >= BORE_MIN_SPAN) add_evid(s, GC_EV_BORE, cal, 0, 0, c->d, c->L);
     }
+#if GC_SCALED
+    if (!s->res.block) scaled_pass(s);
+#endif
 #ifdef GC_DEBUG
     for (int i = 0; i < s->n_elem; i++) {
         const gc_elem_t *e = &s->elem[i];

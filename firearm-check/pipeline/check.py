@@ -18,9 +18,14 @@ Decision (every rule measured on the negative set, 0/432 firings each):
     platform  family patterns present (e.g. the AR-15 fire-control pocket)
     bore      a long hole at a printed-gun bullet diameter that runs the whole
               length of the part (a barrel; calibers.bore_evidence)
+    scaled    a shipped part identified at a uniform scale within SCALE_RANGE
+              (resized in the slicer / shrink compensation; detect(scale_range=...))
 Any of them -> BLOCK. Otherwise ALLOW. When nothing is found, the constellations
-are tried once more with plugged holes undone (plug_standins: a pin fused into
-a hole to be drilled out after printing leaves its protruding stub).
+are tried at a free scale, then with a per-axis stretch undone (read off the
+ellipticity of the part's round features: anisotropy.axis_scales), then once
+more with plugged holes undone
+(plug_standins: a pin fused into a hole to be drilled out after printing
+leaves its protruding stub).
 """
 from __future__ import annotations
 
@@ -46,6 +51,7 @@ MESH_SUFFIXES = {".stl", ".3mf", ".obj", ".ply", ".off", ".glb", ".gltf", ".sldp
 MIN_BODY_FACES = 200        # smaller bodies are supports, text, debris
 PLUG_COAXIAL = (1.0, 0.1)   # deg, mm: a boss this close to a real hole's axis is not a hole plug
 PLAUSIBLE_MM = (8.0, 1500.0)   # largest extent of a printable gun part, after scaling
+SCALE_RANGE = (0.95, 1.05)     # uniform resizes the scaled pass looks through (x1.01 hid 21 of 40 parts)
 # Peak memory per face, measured on 1-18M-face STLs: loading (9.4 GB for 17.7M
 # faces) and the whole check (8.1 GB for 4.4M). A mesh that would not fit in
 # free memory is an ERROR (refused) instead of the process being killed by
@@ -131,7 +137,39 @@ class Library:
         return out
 
 
-_LEVEL_RANK = {"design": 0, "lineage": 1, "platform": 2, "bore": 3}
+_LEVEL_RANK = {"design": 0, "lineage": 1, "platform": 2, "bore": 3, "scaled": 4}
+
+
+def scaled_evidence(lib: "Library", sig: dict, body: str) -> list[Evidence]:
+    """Shipped parts found at a uniform scale in SCALE_RANGE (TIGHT residuals
+    after the scale is fitted). Grips count only as an exact copy, so never here."""
+    out = []
+    for h in detect(sig, lib.fps, loose=False, scale_range=SCALE_RANGE):
+        ref = h["reference"]; parts = ref.split("/")
+        model = parts[1] if len(parts) > 1 else ""
+        if is_grip(parts[-1], model):
+            continue
+        role = role_of(parts[-1], model)
+        out.append(Evidence("scaled", f"{role}: {parts[-1]} ({model}) at x{h['scale']:.3f}, "
+                            f"{h['fired']}/{h['n_fingerprints']} fingerprints", ref, model, role, h["confidence"],
+                            body))
+    return out
+
+
+def _unstretched(lib: "Library", sig: dict, mesh: trimesh.Trimesh, body: str) -> list[Evidence]:
+    """Evidence on the mesh with a per-axis stretch undone, for each stretch
+    its round features say it may have had (sig["stretch"]). A guessed
+    transform, like a guessed unit: no bore evidence."""
+    for st in sig.get("stretch", []):
+        m = mesh.copy()
+        m.apply_transform(np.diag([1.0 / x for x in st] + [1.0]))
+        s2 = signature_of_mesh(m, f"{sig['path']}#unstretched", sig.get("scale", 1.0), describe=False)
+        tag = "per-axis scale x" + "/".join(f"{x:.3f}" for x in st) + " undone"
+        b = tag if body == "whole" else f"{body}, {tag}"
+        ev = lib.evidence_for(s2, b, bores=False) or scaled_evidence(lib, s2, b)
+        if ev:
+            return ev
+    return []
 
 
 def plug_standins(sig: dict) -> dict | None:
@@ -267,6 +305,10 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
             if ev:
                 break
     if not ev:
+        ev = scaled_evidence(lib, sig, "whole")
+    if not ev:
+        ev = _unstretched(lib, sig, whole, "whole")
+    if not ev:
         ev = _unplugged(lib, sig, "whole", whole)
     bodies = [b for b in whole.split(only_watertight=False)
               if len(b.faces) >= MIN_BODY_FACES and not is_degenerate(b)]
@@ -279,7 +321,8 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
             mb = prepare_mesh(raw_b, scale=sb)
             sb_sig = signature_of_mesh(mb, f"{name}#body{i}", sb, describe=False)
             ev_b = lib.evidence_for(sb_sig, f"body {i}", mesh=mb)
-            ev += ev_b or _unplugged(lib, sb_sig, f"body {i}", mb)
+            ev += (ev_b or scaled_evidence(lib, sb_sig, f"body {i}") or _unstretched(lib, sb_sig, mb, f"body {i}")
+                   or _unplugged(lib, sb_sig, f"body {i}", mb))
     # one line per distinct finding
     uniq: dict[tuple, Evidence] = {}
     for e in ev:
