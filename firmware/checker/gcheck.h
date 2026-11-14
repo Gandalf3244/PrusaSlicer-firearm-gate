@@ -63,7 +63,7 @@ extern "C" {
 #define GC_MAX_CIRC 128          /* circular closed loops kept per sampled layer */
 #endif
 #ifndef GC_MAX_RUN
-#define GC_MAX_RUN 256           /* straight wall edges kept per sampled layer */
+#define GC_MAX_RUN 512           /* straight wall edges kept per sampled layer */
 #endif
 #ifndef GC_MAX_ELL
 #define GC_MAX_ELL 64            /* elliptical closed loops kept per sampled layer */
@@ -88,18 +88,28 @@ extern "C" {
 #define GC_MAP_N 320             /* occupancy bitmap: GC_MAP_N x GC_MAP_N cells (a multiple of 8) ... */
 #endif
 #define GC_MAP_CELL 1.0f         /* ... of this size (mm), centred on each layer's first extrusion */
+#ifndef GC_FOOT_N
+#define GC_FOOT_N 128            /* layer footprints: GC_FOOT_N x GC_FOOT_N cells (a power of 2) ... */
+#endif
+#define GC_FOOT_CELL 2.0f        /* ... of this size (mm), on bed coordinates modulo GC_FOOT_N cells */
+#define GC_FOOT_K 4              /* footprints kept: this layer and the 3 before it */
 
 enum { GC_HOLE = 0, GC_BOSS = 1, GC_WALL = 2, GC_SLOT = 3 };
+/* Feature labels are hints, never a way to hide material: a path labelled support / skirt /
+   brim / wipe stays out of the occupancy map (holes and gaps it fills still look empty) but
+   its loops and edges are still examined, among themselves, by the rules for unlabelled
+   G-code - walls labelled as support to hide them are found that way. */
+enum { GC_UNLABELLED = 0, GC_PART = 1, GC_EXCLUDED = 2 };
 
 typedef struct { const char *name; uint8_t n_variants, min_fired, grip; } fp_part_t;
 typedef struct { uint16_t part; uint8_t n, flags; uint16_t e0, r0; } fp_print_t;   /* flags: see mcu_table.py */
 typedef struct { float d, min_L; uint8_t kind, amb; } fp_elem_t;
 typedef struct { float ang, sep; } fp_rel_t;                                        /* pairs 0-1, 0-2, .., in order */
 
-typedef struct { float cx, cy, rc, w; } gc_circ_t;
-typedef struct { float mx, my, ux, uy, half, off; int8_t side; uint8_t fam, bin; int16_t near_gap, near_mat; } gc_run_t;
+typedef struct { float cx, cy, rc, w; uint8_t lab; } gc_circ_t;   /* lab: GC_UNLABELLED / GC_PART / GC_EXCLUDED path */
+typedef struct { float mx, my, ux, uy, half, off; int8_t side; uint8_t fam, bin, lab, outer; int16_t near_gap, near_mat; } gc_run_t;   /* outer: labelled outer wall */
 typedef struct { float cx, cy, sum_r, z0, z1; uint16_t n; uint8_t kind, seen; } gc_track_t;
-typedef struct { float cx, cy, a, b, ux, uy, w; } gc_ell_t;          /* semi-axes a >= b, (ux, uy) along a */
+typedef struct { float cx, cy, a, b, ux, uy, w; uint8_t lab; } gc_ell_t;   /* semi-axes a >= b, (ux, uy) along a */
 typedef struct {
     float x0, y0, zref, z0, z1, lx, ly, lz, vx, vy, sum_b, sum_ratio, c2, s2;
     double sz, szz, sx, szx, sy, szy, sxx, syy;     /* centre against height, relative to the first layer */
@@ -112,6 +122,7 @@ typedef struct {
     uint16_t n;
     uint8_t kind, seen;                            /* kind: GC_SLOT = gap between the edges, GC_WALL = material */
     uint8_t drift;                                 /* joined as a tilted face: its midline moves by k per mm */
+    uint8_t excl;                                  /* followed from labelled support's edges */
 } gc_ptrack_t;
 typedef struct { float a[3], c[3], d, L, fill; uint8_t kind; } gc_elem_t;   /* fill: length with wall (coaxial pieces merged) */
 
@@ -133,19 +144,21 @@ typedef struct {
 /* Capacities of the per-file state. The state lives in one block given by the caller, laid
    out by gc_init; smaller capacities need less memory and lose a little recall (overflowing
    drops data, never writes out of bounds). */
-typedef struct { uint16_t path, circ, ell, run, track, etrack, ptrack, elem, map_n; } gc_caps_t;
-extern const gc_caps_t gc_caps_full;      /* the GC_* defaults above (~55 KB) */
-extern const gc_caps_t gc_caps_compact;   /* ~35 KB */
-extern const gc_caps_t gc_caps_tiny;      /* ~27 KB */
+typedef struct { uint16_t path, circ, ell, run, track, etrack, ptrack, elem, map_n, foot_n, smap; } gc_caps_t;   /* smap: 1 = second map with labelled support */
+extern const gc_caps_t gc_caps_full;      /* the GC_* defaults above (~89 KB) */
+extern const gc_caps_t gc_caps_compact;   /* ~51 KB */
+extern const gc_caps_t gc_caps_tiny;      /* ~28 KB: no second map (walls labelled as support are found as holes only) */
 
 typedef struct {
     gc_caps_t cap;
     /* parser */
     float x, y, z, e;
     uint8_t abs_xyz, abs_e, excluded, has_pos, has_roles, outer;   /* outer: labelled external perimeter */
+    uint8_t p_lab, p_outer;       /* the current path's label class (GC_UNLABELLED ..), labelled outer wall */
     int stride;
     /* extents of the model */
-    float layer_z, prev_z, zmin, zmax, xmin, xmax, ymin, ymax;
+    float layer_z, prev_z, zmin, zmax, xmin, xmax, ymin, ymax;   /* the part (labelled support left out) */
+    float axmin, axmax, aymin, aymax, azmin, azmax;              /* everything (used when nothing is labelled part) */
     uint32_t layer_idx;
     uint8_t in_layer, sampled;
     /* current path (extrusion polyline) */
@@ -164,14 +177,26 @@ typedef struct {
     uint16_t n_circ;
     gc_ell_t *ell;                /* [cap.ell] */
     uint16_t n_ell;
-    uint16_t whist[GC_WHIST];     /* closed-loop bead widths of the layer, 0.01 mm bins from 0.10 mm */
+    uint16_t whist[GC_WHIST];     /* closed-loop bead widths of the layer, 0.01 mm bins from 0.10 mm ... */
+    uint16_t whist_other[GC_WHIST];   /* ... of labelled outer walls (labelled G-code) / of the other loops */
     gc_run_t *run;                /* [cap.run] */
     uint16_t *run_order;          /* [cap.run] sorted by direction bin, then offset across the direction */
     uint16_t bin_start[GC_NBIN + 1];
     uint16_t n_run;
-    uint8_t *map;                 /* [cap.map_n * cap.map_n / 8] */
+    uint8_t *map;                 /* [cap.map_n * cap.map_n / 8] the part's material */
+    uint8_t *smap;                /* [same] labelled support's material (cap.smap; else NULL) */
+    const uint8_t *mplane;        /* the map the tests read: map, or smap = map + smap for labelled support's loops / edges */
     float map_x0, map_y0;
-    uint8_t map_init;
+    uint8_t map_init, prev_part;  /* prev_part: the last layer had part material, centred at prev_cx, prev_cy */
+    float lx0, lx1, ly0, ly1, prev_cx, prev_cy;   /* the part's extent in this layer */
+    /* where the last layers put material: a layer's height is measured from the layer under
+       each path, not from the layer printed before it (support printed at its own heights
+       between the part's layers, PrusaSlicer's default, is not "the layer below") */
+    uint8_t *foot;                /* [GC_FOOT_K][cap.foot_n * cap.foot_n / 8] */
+    float foot_z[GC_FOOT_K];
+    uint8_t foot_cur, foot_used;  /* foot_used: bit k = slot k holds a layer */
+    uint8_t foot_under;           /* bit k = slot k holds a layer 0.02 - 1.2 mm below this one */
+    uint32_t pvote[GC_FOOT_K], lvote[GC_FOOT_K];   /* points of this path / layer over material of slot k */
     /* across layers */
     gc_track_t *track;            /* [cap.track] */
     uint16_t n_track;

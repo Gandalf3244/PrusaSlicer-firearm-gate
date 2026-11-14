@@ -17,7 +17,7 @@ extern uint32_t _sidata, _sdata, _edata, _sbss, _ebss, _estack, _stack_bottom;
 int main(void);
 
 /* the state block, full capacities (checked at start: gc_init fails if it does not fit) */
-static uint64_t S_mem[57 * 1024 / 8];
+static uint64_t S_mem[92 * 1024 / 8];
 volatile gc_result_t gc_out;
 volatile uint32_t gc_stack_used, gc_state_size, gc_status;
 /* flat report for the emulator: status, stack used, state bytes, block, n_evid, lines, layers,

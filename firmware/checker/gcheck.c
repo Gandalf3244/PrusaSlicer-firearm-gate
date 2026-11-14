@@ -15,10 +15,15 @@ typedef char gc_parts_fit[FP_N_PARTS <= GC_MAX_PARTS ? 1 : -1];     /* GC_MAX_PA
 #define CLOSE_TOL 0.6f                        /* x width: loop ends this close = closed */
 #define CENTER_TOL 0.15f                      /* mm: same circle centre (concentric / next layer) */
 #define TRACK_R_TOL 0.10f                     /* mm: same radius in the next sampled layer */
+#define GC_TRACK_EXCL 4                       /* track kind flag: followed from labelled support (element kind = kind & 3) */
+#define SKIP_DZ 1.2f                          /* a track stays open over layers that print nothing near it, this long (mm) */
+#define SKIP_MARGIN 1.5f                      /* "near": up to this far out from the track's radius / half width (mm) */
 #define MIN_LAYERS 2                          /* sampled layers a cylinder must appear in */
 #define ARC_STEP 0.1745f                      /* rad: arcs are split into <= 10 deg segments */
 #define PARTNER_LO 0.6f                       /* x width: gap to the next perimeter of a wall family ... */
 #define PARTNER_HI 1.4f                       /* ... (PARTNER_OFFSETS 0.9 / 1.35 in pipeline.gcode_mesh) */
+#define SOLID_PCT 50                          /* without labels: a lone hole wall needs >= this % of the map ring outside it filled */
+#define SPARSE_PCT 50                         /* ... and a hole may hold <= this % (support) */
 #define GC_MAX_R 35.0f                        /* mm: largest circle radius considered */
 #define COAX_TOL 0.5f                         /* mm: coaxial for the bore span (calibers._coaxial) */
 /* straight edges and edge pairs */
@@ -107,7 +112,8 @@ static int map_get(const gc_state_t *s, int i, int j)
     const int N = s->cap.map_n;
     if (i < 0 || j < 0 || i >= N || j >= N) return -1;
     int k = j * N + i;
-    return (s->map[k >> 3] >> (k & 7)) & 1;
+    int m = (s->map[k >> 3] >> (k & 7)) & 1;
+    return s->mplane == s->map ? m : m | ((s->smap[k >> 3] >> (k & 7)) & 1);
 }
 
 static int map_at(const gc_state_t *s, float x, float y)
@@ -115,7 +121,7 @@ static int map_at(const gc_state_t *s, float x, float y)
     return map_get(s, (int)floorf((x - s->map_x0) / GC_MAP_CELL), (int)floorf((y - s->map_y0) / GC_MAP_CELL));
 }
 
-static void map_segment(gc_state_t *s, float x0, float y0, float x1, float y1)
+static void map_segment(gc_state_t *s, uint8_t *map, float x0, float y0, float x1, float y1)
 {
     /* cells along the segment, sampled every half cell by incremental stepping
        (no floor / division per sample: this runs for every millimetre extruded) */
@@ -128,7 +134,7 @@ static void map_segment(gc_state_t *s, float x0, float y0, float x1, float y1)
     for (int k = 0; k <= n; k++, fx += sx, fy += sy) {
         if (fx < 0 || fy < 0 || fx >= N || fy >= N) continue;
         int c = (int)fy * s->cap.map_n + (int)fx;
-        s->map[c >> 3] |= (uint8_t)(1u << (c & 7));
+        map[c >> 3] |= (uint8_t)(1u << (c & 7));
     }
 }
 
@@ -161,7 +167,7 @@ static void flush_run(gc_state_t *s)
     if (s->n_run >= s->cap.run) { s->res.overflow |= 8; return; }
     gc_run_t *r = &s->run[s->n_run++];
     r->mx = 0.5f * (s->rx0 + s->rx1); r->my = 0.5f * (s->ry0 + s->ry1);
-    r->ux = dx / L; r->uy = dy / L; r->half = 0.5f * L;
+    r->ux = dx / L; r->uy = dy / L; r->half = 0.5f * L; r->lab = s->p_lab; r->outer = s->p_outer;
     if (s->n_run > s->res.max_run) s->res.max_run = s->n_run;
 }
 
@@ -185,6 +191,74 @@ static float layer_h(const gc_state_t *s)
     float h = s->layer_z - s->prev_z;
     if (!(h > 0.02f && h < 1.2f)) h = s->layer_z > 0.02f && s->layer_z < 1.2f ? s->layer_z : 0.2f;
     return h;
+}
+
+/* ------------------------------------------------------------------ layer footprints */
+
+/* bit index of the cell holding (x, y) within a footprint */
+static uint32_t foot_cell(const gc_state_t *s, float x, float y)
+{
+    const int N = s->cap.foot_n;
+    int i = (int)floorf(x * (1.0f / GC_FOOT_CELL)) & (N - 1), j = (int)floorf(y * (1.0f / GC_FOOT_CELL)) & (N - 1);
+    return (uint32_t)(j * N + i);
+}
+
+static void foot_segment(gc_state_t *s, float x0, float y0, float x1, float y1)
+{
+    if (!s->cap.foot_n) return;
+    float dx = x1 - x0, dy = y1 - y0;
+    int n = (int)(sqrtf(dx * dx + dy * dy) * (1.0f / GC_FOOT_CELL)) + 1;
+    uint8_t *f = s->foot + (uint32_t)s->foot_cur * s->cap.foot_n * s->cap.foot_n / 8;
+    for (int k = n == 1 ? 1 : 0; k <= n; k++) {
+        uint32_t c = foot_cell(s, x0 + dx * k / n, y0 + dy * k / n);
+        f[c >> 3] |= (uint8_t)(1u << (c & 7));
+    }
+}
+
+static int foot_below(const gc_state_t *s, int k)
+{
+    return s->foot_under >> k & 1;
+}
+
+static void foot_vote(gc_state_t *s, float x, float y)
+{
+    if (!s->cap.foot_n || !s->foot_under || (s->pn & 3)) return;    /* every 4th point: a sample is enough */
+    uint32_t c = foot_cell(s, x, y), slot = (uint32_t)s->cap.foot_n * s->cap.foot_n;
+    for (int k = 0; k < GC_FOOT_K; k++) {
+        uint32_t b = k * slot + c;
+        if ((s->foot_under >> k & 1) && (s->foot[b >> 3] >> (b & 7) & 1)) { s->pvote[k]++; s->lvote[k]++; }
+    }
+}
+
+static int foot_best(const gc_state_t *s, const uint32_t *v)
+{
+    /* the highest layer under at least half as many points as the layer under most
+       (a straight tube lies over all of them alike) */
+    uint32_t most = 0;
+    for (int k = 0; k < GC_FOOT_K; k++)
+        if (foot_below(s, k) && v[k] > most) most = v[k];
+    int best = -1;
+    for (int k = 0; k < GC_FOOT_K; k++)
+        if (most && foot_below(s, k) && 2 * v[k] >= most && (best < 0 || s->foot_z[k] > s->foot_z[best])) best = k;
+    return best;
+}
+
+/* height of this layer: from the layer under most of what it printed so far */
+static float layer_h_under(const gc_state_t *s)
+{
+    int k = foot_best(s, s->lvote);
+    return k < 0 ? layer_h(s) : s->layer_z - s->foot_z[k];
+}
+
+/* height of the current path: from the layer under it, unless that is unclear (the
+   layer's choice gets the benefit of the doubt: a part's outer perimeter can lie over
+   support of the layer printed in between as much as over the part's own layer) */
+static float path_h(const gc_state_t *s)
+{
+    int kp = foot_best(s, s->pvote), kl = foot_best(s, s->lvote);
+    if (kp < 0 && kl < 0) return layer_h(s);
+    if (kp < 0 || (kl >= 0 && s->pvote[kp] < 2 * s->pvote[kl])) kp = kl;
+    return s->layer_z - s->foot_z[kp];
 }
 
 static int try_circle(gc_state_t *s, float w)
@@ -223,7 +297,7 @@ static int try_circle(gc_state_t *s, float w)
     s->res.circles++;
     if (s->n_circ >= s->cap.circ) { s->res.overflow |= 1; return 1; }
     gc_circ_t *c = &s->circ[s->n_circ++];
-    c->cx = s->px0 + mx + a; c->cy = s->py0 + my + b; c->rc = r; c->w = w;
+    c->cx = s->px0 + mx + a; c->cy = s->py0 + my + b; c->rc = r; c->w = w; c->lab = s->p_lab;
     if (s->n_circ > s->res.max_circ) s->res.max_circ = s->n_circ;
     return 1;
 }
@@ -318,7 +392,7 @@ static void try_ellipse(gc_state_t *s, float w)
     s->res.ellipses++;
     if (s->n_ell >= s->cap.ell) { s->res.overflow |= 32; return; }
     gc_ell_t *e = &s->ell[s->n_ell++];
-    e->cx = s->px0 + mx + c.xc * sc; e->cy = s->py0 + my + c.yc * sc; e->a = c.am; e->b = c.bm; e->ux = c.ux; e->uy = c.uy; e->w = w;
+    e->cx = s->px0 + mx + c.xc * sc; e->cy = s->py0 + my + c.yc * sc; e->a = c.am; e->b = c.bm; e->ux = c.ux; e->uy = c.uy; e->w = w; e->lab = s->p_lab;
     if (s->n_ell > s->res.max_ell) s->res.max_ell = s->n_ell;
 }
 
@@ -328,32 +402,43 @@ static void end_path(gc_state_t *s)
     s->in_path = 0;
     flush_run(s);
     if (s->pn < 3 || s->plen < 2.0f) { s->n_run = s->path_run0; return; }
-    float h = layer_h(s);
+    float h = path_h(s);
     float w = s->pe * FIL_AREA / (s->plen * h) + h * (1.0f - PI_F / 4.0f);
     if (!(w > 0.1f && w < 2.0f)) w = 0.45f;
     float gx = s->lastx - s->px0, gy = s->lasty - s->py0;
     if (sqrtf(gx * gx + gy * gy) > CLOSE_TOL * w) { s->n_run = s->path_run0; return; }   /* open path: no walls */
     s->res.loops++;
     int wb = (int)((w - 0.10f) * 100.0f);
-    if ((s->outer || !s->has_roles) && wb >= 0 && wb < GC_WHIST && s->whist[wb] < 65535) s->whist[wb]++;
+    uint16_t *wh = s->p_outer || !s->has_roles ? s->whist : s->whist_other;
+    if (wb >= 0 && wb < GC_WHIST && wh[wb] < 65535) wh[wb]++;
     if (s->pn < 6 || s->p_nocirc) return;
     if (!try_circle(s, w) && GC_TILT) try_ellipse(s, w);
 }
 
 static void path_segment(gc_state_t *s, float x0, float y0, float x1, float y1, float de)
 {
+    /* labelled support straight after the part's wall (no travel move) is another path */
+    uint8_t lab = !s->has_roles ? GC_UNLABELLED : s->excluded ? GC_EXCLUDED : GC_PART;
+    if (s->in_path && lab != s->p_lab) end_path(s);
+    s->p_lab = lab;
     if (!s->in_path) {
         s->in_path = 1;
         s->px0 = x0; s->py0 = y0; s->plen = 0; s->pe = 0; s->pn = 0; s->p_nocirc = 0;
         s->bx0 = s->bx1 = x0; s->by0 = s->by1 = y0;
         s->run_on = 0; s->path_run0 = s->n_run;
+        memset(s->pvote, 0, sizeof s->pvote);
         path_point(s, x0, y0);
     }
     float dx = x1 - x0, dy = y1 - y0;
     s->plen += sqrtf(dx * dx + dy * dy);
     s->pe += de;
     path_point(s, x1, y1);
-    if (GC_EDGES && (s->outer || !s->has_roles)) run_segment(s, x0, y0, x1, y1);   /* labelled: outer walls only */
+    foot_vote(s, x1, y1);
+    /* outer wall as of this segment (a slicer may change the role without a travel move) */
+    uint8_t outer = s->p_lab == GC_PART && s->outer;
+    if (outer != s->p_outer) flush_run(s);
+    s->p_outer = outer;
+    if (GC_EDGES && (s->p_lab != GC_EXCLUDED || s->smap)) run_segment(s, x0, y0, x1, y1);   /* labelled support: sides from smap */
 }
 
 /* ------------------------------------------------------------------ elements */
@@ -373,7 +458,7 @@ static void close_track(gc_state_t *s, int i)
 {
     gc_track_t *t = &s->track[i];
     if (t->n >= MIN_LAYERS) {
-        add_elem(s, t->kind, 0, 0, 1, t->cx, t->cy, 0.5f * (t->z0 + t->z1), 2.0f * t->sum_r / t->n, t->z1 - t->z0);
+        add_elem(s, t->kind & 3, 0, 0, 1, t->cx, t->cy, 0.5f * (t->z0 + t->z1), 2.0f * t->sum_r / t->n, t->z1 - t->z0);
         s->res.v_cyl++;
     }
     s->track[i] = s->track[--s->n_track];
@@ -422,12 +507,18 @@ static float median_circ_w(const gc_state_t *s)
 
 static float median_edge_w(const gc_state_t *s)
 {
-    /* bead width for the straight edges: median over the layer's outer-wall loops */
+    /* bead width for the straight edges: median over the layer's outer-wall loops (any
+       loop where nothing is labelled as one) */
     uint32_t tot = 0, acc = 0;
-    for (int i = 0; i < GC_WHIST; i++) tot += s->whist[i];
+    const uint16_t *wh = s->whist;
+    for (int i = 0; i < GC_WHIST; i++) tot += wh[i];
+    if (!tot) {
+        wh = s->whist_other;
+        for (int i = 0; i < GC_WHIST; i++) tot += wh[i];
+    }
     if (!tot) return median_circ_w(s);
     for (int i = 0; i < GC_WHIST; i++) {
-        acc += s->whist[i];
+        acc += wh[i];
         if (2 * acc >= tot) return 0.10f + 0.01f * i + 0.005f;
     }
     return 0.45f;
@@ -448,6 +539,23 @@ static int region_empty(const gc_state_t *s, float cx, float cy, float rho)
     return 1;
 }
 
+/* share (percent) of the map cells between radii r0 and r1 around (cx, cy) with material; -1: none or off the map */
+static int ring_fill(const gc_state_t *s, float cx, float cy, float r0, float r1)
+{
+    int ic = (int)floorf((cx - s->map_x0) / GC_MAP_CELL), jc = (int)floorf((cy - s->map_y0) / GC_MAP_CELL);
+    int k = (int)(r1 / GC_MAP_CELL) + 1, tot = 0, occ = 0;
+    for (int j = jc - k; j <= jc + k; j++)
+        for (int i = ic - k; i <= ic + k; i++) {
+            float x = s->map_x0 + (i + 0.5f) * GC_MAP_CELL - cx, y = s->map_y0 + (j + 0.5f) * GC_MAP_CELL - cy;
+            float d2 = x * x + y * y;
+            if (d2 < r0 * r0 || d2 > r1 * r1) continue;
+            int m = map_get(s, i, j);
+            if (m < 0) return -1;
+            tot++; occ += m;
+        }
+    return tot ? occ * 100 / tot : -1;
+}
+
 static int ring_empty(const gc_state_t *s, float cx, float cy, float r0, float r1)
 {
     int ic = (int)floorf((cx - s->map_x0) / GC_MAP_CELL), jc = (int)floorf((cy - s->map_y0) / GC_MAP_CELL);
@@ -464,6 +572,27 @@ static int ring_empty(const gc_state_t *s, float cx, float cy, float r0, float r
     return tot > 0 && occ * 100 <= tot * 15;
 }
 
+/* the map for a loop / edge / track of this class (labelled support: all material) */
+static void use_map(gc_state_t *s, int excl)
+{
+    s->mplane = excl && s->smap ? s->smap : s->map;
+}
+
+/* This layer printed nothing near (cx, cy) shortly after the track's last layer: a
+   layer of something else (support printed at its own heights, another object), so
+   the track stays open instead of ending here. */
+static int layer_elsewhere(const gc_state_t *s, float cx, float cy, float r, float z1)
+{
+    if (s->layer_z - z1 >= SKIP_DZ || map_at(s, cx, cy) != 0) return 0;
+    /* the wall around it: 8 directions, 0.5 and 1.5 mm out (sampled - this runs for every
+       open track on every layer of support printed at its own heights) */
+    static const float D[8][2] = {{1, 0}, {0.7071f, 0.7071f}, {0, 1}, {-0.7071f, 0.7071f}, {-1, 0}, {-0.7071f, -0.7071f}, {0, -1}, {0.7071f, -0.7071f}};
+    for (int k = 0; k < 8; k++)
+        for (float o = 0.5f; o <= SKIP_MARGIN; o += 1.0f)
+            if (map_at(s, cx + D[k][0] * (r + o), cy + D[k][1] * (r + o)) != 0) return 0;
+    return 1;
+}
+
 static void layer_circles(gc_state_t *s, float w, float h)
 {
     uint8_t *done = s->done;
@@ -471,36 +600,49 @@ static void layer_circles(gc_state_t *s, float w, float h)
     for (int i = 0; i < s->n_circ; i++) {
         if (done[i]) continue;
         /* concentric family: innermost loop faces a hole, outermost may face air */
-        int in = i, out = i;
+        int in = i, out = i, excl = s->circ[i].lab == GC_EXCLUDED, cls = excl ? GC_TRACK_EXCL : 0;   /* tracks of one class */
+        use_map(s, excl);
         for (int j = i; j < s->n_circ; j++) {
             float dx = s->circ[j].cx - s->circ[i].cx, dy = s->circ[j].cy - s->circ[i].cy;
-            if (dx * dx + dy * dy > CENTER_TOL * CENTER_TOL) continue;
+            if (dx * dx + dy * dy > CENTER_TOL * CENTER_TOL || (s->circ[j].lab == GC_EXCLUDED) != excl) continue;
             done[j] = 1;
             if (s->circ[j].rc < s->circ[in].rc) in = j;
             if (s->circ[j].rc > s->circ[out].rc) out = j;
         }
         /* without feature labels: a model wall is a family of perimeters one
            bead apart, a support shell or tree branch a single loop - the loop
-           facing the hole (or the air) must have a concentric partner at ~one width */
-        int in_ok = s->has_roles, out_ok = s->has_roles;     /* labelled support is already excluded */
+           facing the hole (or the air) must have a concentric partner at ~one width,
+           or (a hole whose inner perimeters are not round: Cura merges them with the
+           next feature's) the part's material all around it outside */
+        int in_ok = s->circ[in].lab == GC_PART, out_ok = s->circ[out].lab == GC_PART;
         for (int j = i; j < s->n_circ; j++) {
             float dx = s->circ[j].cx - s->circ[i].cx, dy = s->circ[j].cy - s->circ[i].cy;
-            if (dx * dx + dy * dy > CENTER_TOL * CENTER_TOL) continue;
+            if (dx * dx + dy * dy > CENTER_TOL * CENTER_TOL || (s->circ[j].lab == GC_EXCLUDED) != excl) continue;
             float gi = s->circ[j].rc - s->circ[in].rc, go = s->circ[out].rc - s->circ[j].rc;
             if (gi >= PARTNER_LO * w && gi <= PARTNER_HI * w) in_ok = 1;
             if (go >= PARTNER_LO * w && go <= PARTNER_HI * w) out_ok = 1;
         }
         const gc_circ_t *ci = &s->circ[in], *co = &s->circ[out];
         float Rh = ci->rc - 0.5f * w;
-        if (in_ok && Rh >= 0.5f && region_empty(s, ci->cx, ci->cy, Rh - 0.75f))
-            add_vcyl(s, GC_HOLE, ci->cx, ci->cy, Rh, h);
+        if (!in_ok && (!excl || s->smap) && ring_fill(s, ci->cx, ci->cy, ci->rc + 0.5f * w + 0.25f, ci->rc + 0.5f * w + 1.25f) >= SOLID_PCT) in_ok = 1;
+        /* without labels, support printed inside a hole (away from its wall) is in the map
+           too: a hole may hold sparse material */
+        int empty = region_empty(s, ci->cx, ci->cy, Rh - 0.75f);
+        if (!empty && Rh - 0.75f > 0.5f) {
+            int f = ring_fill(s, ci->cx, ci->cy, 0, Rh - 0.75f);
+            empty = f >= 0 && f <= SPARSE_PCT;
+        }
+        if (in_ok && Rh >= 0.5f && empty)
+            add_vcyl(s, GC_HOLE | cls, ci->cx, ci->cy, Rh, h);
         float Rb = co->rc + 0.5f * w;
         if (out_ok && ring_empty(s, co->cx, co->cy, Rb + 0.75f, Rb + 2.0f))
-            add_vcyl(s, GC_BOSS, co->cx, co->cy, Rb, h);
+            add_vcyl(s, GC_BOSS | cls, co->cx, co->cy, Rb, h);
     }
     for (int i = s->n_track - 1; i >= 0; i--) {
-        if (!s->track[i].seen) close_track(s, i);
-        else s->track[i].seen = 0;
+        gc_track_t *t = &s->track[i];
+        use_map(s, t->kind & GC_TRACK_EXCL);
+        if (t->seen) t->seen = 0;
+        else if (!layer_elsewhere(s, t->cx, t->cy, t->sum_r / t->n, t->z1)) close_track(s, i);
     }
 }
 
@@ -538,7 +680,7 @@ static void close_etrack(gc_state_t *s, int i)
                 float zm = 0.5f * (t->z0 + t->z1) - t->zref;
                 /* complete sections span L cos(tilt) - 2 r sin(tilt) of height */
                 float L = (t->z1 - t->z0) / ca + 2.0f * r * tan_d;
-                add_elem(s, t->kind, (float)vx * ca, (float)vy * ca, ca, t->x0 + (float)(bx + vx * (double)zm),
+                add_elem(s, t->kind & 3, (float)vx * ca, (float)vy * ca, ca, t->x0 + (float)(bx + vx * (double)zm),
                          t->y0 + (float)(by + vy * (double)zm), t->zref + zm, 2.0f * r, L);
                 s->res.t_cyl++;
             }
@@ -628,19 +770,20 @@ static void layer_ellipses(gc_state_t *s, float w, float h)
     for (int i = 0; i < s->n_ell; i++) {
         if (done[i]) continue;
         const gc_ell_t *ei = &s->ell[i];
-        int in = i, out = i;
+        int in = i, out = i, excl = ei->lab == GC_EXCLUDED, cls = excl ? GC_TRACK_EXCL : 0;
+        use_map(s, excl);
         uint8_t *fam = s->fam;
         memset(fam, 0, s->n_ell);
         for (int j = i; j < s->n_ell; j++) {                          /* concentric, same major axis */
             const gc_ell_t *ej = &s->ell[j];
             float dx = ej->cx - ei->cx, dy = ej->cy - ei->cy;
-            if (dx * dx + dy * dy > CENTER_TOL * CENTER_TOL) continue;
+            if (dx * dx + dy * dy > CENTER_TOL * CENTER_TOL || (ej->lab == GC_EXCLUDED) != excl) continue;
             if (fabsf(ej->ux * ei->uy - ej->uy * ei->ux) > (ei->a < 1.1f * ei->b ? ELL_DIR_SIN_ROUND : ELL_DIR_SIN)) continue;
             done[j] = fam[j] = 1;
             if (ej->b < s->ell[in].b) in = j;
             if (ej->b > s->ell[out].b) out = j;
         }
-        int in_ok = s->has_roles, out_ok = s->has_roles;
+        int in_ok = s->ell[in].lab == GC_PART, out_ok = s->ell[out].lab == GC_PART;
         for (int j = i; j < s->n_ell; j++) {
             if (!fam[j]) continue;
             float gi = s->ell[j].b - s->ell[in].b, go = s->ell[out].b - s->ell[j].b;
@@ -658,15 +801,17 @@ static void layer_ellipses(gc_state_t *s, float w, float h)
             float q = 0.5f * ah;                                       /* along the major axis too (0.87 bh from the wall) */
             if (q <= bh - 0.75f || (map_at(s, ci->cx + q * ci->ux, ci->cy + q * ci->uy) == 0
                                     && map_at(s, ci->cx - q * ci->ux, ci->cy - q * ci->uy) == 0))
-                add_ecyl(s, GC_HOLE, ci->cx, ci->cy, ah, bh, ci->ux, ci->uy, h);
+                add_ecyl(s, GC_HOLE | cls, ci->cx, ci->cy, ah, bh, ci->ux, ci->uy, h);
         }
         float bb = co->b + 0.5f * w, ab = co->a + 0.5f * w;
         if (out_ok && ell_ring_empty(s, co->cx, co->cy, ab, bb, co->ux, co->uy))
-            add_ecyl(s, GC_BOSS, co->cx, co->cy, ab, bb, co->ux, co->uy, h);
+            add_ecyl(s, GC_BOSS | cls, co->cx, co->cy, ab, bb, co->ux, co->uy, h);
     }
     for (int i = s->n_etrack - 1; i >= 0; i--) {
-        if (!s->etrack[i].seen) close_etrack(s, i);
-        else s->etrack[i].seen = 0;
+        gc_etrack_t *t = &s->etrack[i];
+        use_map(s, t->kind & GC_TRACK_EXCL);
+        if (t->seen) t->seen = 0;
+        else if (!layer_elsewhere(s, t->lx, t->ly, t->sum_b / t->n, t->z1)) close_etrack(s, i);
     }
 }
 
@@ -746,14 +891,14 @@ static void close_ptrack(gc_state_t *s, int i)
 /* phase 0: join a track whose (predicted) midline it continues, else return 0; phase 1:
    join a one-layer track as a drifting (tilted) face, else start a track. Two phases so a
    drifting match cannot take a track that another pair of the layer continues exactly. */
-static int add_pair(gc_state_t *s, uint8_t kind, float ux, float uy, float m, float t0, float t1, float sep, float h,
+static int add_pair(gc_state_t *s, uint8_t kind, uint8_t excl, float ux, float uy, float m, float t0, float t1, float sep, float h,
                     int phase)
 {
     int best = -1, bdrift = 0;
     float bd = 1e9f;
     for (int i = 0; i < s->n_ptrack; i++) {
         gc_ptrack_t *t = &s->ptrack[i];
-        if (t->kind != kind || t->seen || ux * t->ux + uy * t->uy < PTRACK_COS) continue;
+        if (t->kind != kind || t->excl != excl || t->seen || ux * t->ux + uy * t->uy < PTRACK_COS) continue;
         if (!(t0 < t->t1 && t1 > t->t0)) continue;
         float dz = s->layer_z - t->lz, dd = fabsf(m - (t->lm + t->k * dz));
         float dm = t->drift ? dd : fabsf(m - t->m);
@@ -776,7 +921,7 @@ static int add_pair(gc_state_t *s, uint8_t kind, float ux, float uy, float m, fl
         if (s->n_ptrack >= s->cap.ptrack) { s->res.overflow |= 16; return 1; }
         t = &s->ptrack[s->n_ptrack++];
         memset(t, 0, sizeof *t);
-        t->ux = ux; t->uy = uy; t->m = t->lm = m; t->t0 = t0; t->t1 = t1; t->kind = kind;
+        t->ux = ux; t->uy = uy; t->m = t->lm = m; t->t0 = t0; t->t1 = t1; t->kind = kind; t->excl = excl;
         t->zref = s->layer_z - 0.5f * h; t->z0 = s->layer_z - h; t->z1 = s->layer_z;
         t->s_min = t->s_max = sep;
         if (s->n_ptrack > s->res.max_ptrack) s->res.max_ptrack = s->n_ptrack;
@@ -831,6 +976,7 @@ static int scan_bin(const gc_state_t *s, int ia, int bin, int toward, int mode, 
         int j = s->run_order[k];
         if (j == ia) continue;
         const gc_run_t *b = &s->run[j];
+        if ((b->lab == GC_EXCLUDED) != (a->lab == GC_EXCLUDED)) continue;   /* labelled support: among itself */
         if (fabsf(b->off - oa) > PAIR_MAX_SEP + 2.0f) break;
         if (fabsf(a->ux * b->uy - a->uy * b->ux) > SIN_PAIR_WIN) continue;   /* sin of the angle between the lines */
         float q = (b->mx - a->mx) * nx + (b->my - a->my) * ny;
@@ -872,6 +1018,7 @@ static void layer_edges(gc_state_t *s, float w, float h)
     for (int i = 0; i < n; i++) {
         gc_run_t *r = &s->run[i];
         float nx = -r->uy, ny = r->ux;
+        use_map(s, r->lab == GC_EXCLUDED);
         int pe = all_empty(s, r, nx, ny, o), ne = all_empty(s, r, -nx, -ny, o);
         r->side = (int8_t)(pe && !ne ? 1 : (ne && !pe ? -1 : 0));
         float th = atan2f(r->uy, r->ux);
@@ -880,7 +1027,7 @@ static void layer_edges(gc_state_t *s, float w, float h)
         int b = (int)(th / PAIR_WIN);
         r->bin = (uint8_t)(b < 0 ? 0 : (b >= GC_NBIN ? GC_NBIN - 1 : b));
         r->off = r->mx * bin_nx(r->bin) + r->my * bin_ny(r->bin);
-        r->fam = (uint8_t)s->has_roles;
+        r->fam = r->outer;
         r->near_gap = r->near_mat = -1;
         cnt[r->bin]++;
     }
@@ -894,14 +1041,27 @@ static void layer_edges(gc_state_t *s, float w, float h)
         s->run_order[k] = (uint16_t)i;
     }
     float q;
-    if (!s->has_roles)
-        /* without labels: a model edge has a parallel partner perimeter one bead inside it */
+    {
+        /* an edge with a partner perimeter one bead out on its empty side is an inner
+           perimeter (the probe reached past the outer one), whatever its label says; a
+           model edge is labelled as the outer wall or has a parallel partner perimeter
+           one bead inside it */
+        uint8_t *inner = s->added;
+        int outer_lab = 0;            /* a layer with labelled outer walls: the part's other perimeters are inner */
+        for (int i = 0; i < n; i++) outer_lab |= s->run[i].outer;
         for (int i = 0; i < n; i++)
-            if (s->run[i].side && scan(s, i, -s->run[i].side, 0, w, &q) >= 0) s->run[i].fam = 1;
+            inner[i] = s->run[i].side && ((outer_lab && s->run[i].lab == GC_PART && !s->run[i].outer)
+                                          || scan(s, i, s->run[i].side, 0, w, &q) >= 0);
+        for (int i = 0; i < n; i++) {
+            if (inner[i]) s->run[i].side = 0, s->run[i].fam = 0;
+            else if (s->run[i].side && !s->run[i].fam && scan(s, i, -s->run[i].side, 0, w, &q) >= 0) s->run[i].fam = 1;
+        }
+    }
     /* nearest facing edge across the gap, nearest boundary edge across the material */
     for (int i = 0; i < n; i++) {
         gc_run_t *a = &s->run[i];
         if (!a->side || !a->fam) continue;
+        use_map(s, a->lab == GC_EXCLUDED);
         float nx = -a->uy, ny = a->ux;
         for (int k = 0; k < 2; k++) {
             int j = scan(s, i, k ? -a->side : a->side, k ? 2 : 1, w, &q);
@@ -935,12 +1095,20 @@ static void layer_edges(gc_state_t *s, float w, float h)
             float t0 = fmaxf(ta - a->half, tb - b->half), t1 = fminf(ta + a->half, tb + b->half);
             float cs = fabsf(oa - ob);
             float sep = k ? cs + w : cs - w;                                 /* wall surfaces are w/2 off the bead centres */
-            if (add_pair(s, k ? GC_WALL : GC_SLOT, ux, uy, 0.5f * (oa + ob), t0, t1, sep, h, phase)) added[i] |= (uint8_t)(1 << k);
+            if (add_pair(s, k ? GC_WALL : GC_SLOT, a->lab == GC_EXCLUDED, ux, uy, 0.5f * (oa + ob), t0, t1, sep, h, phase)) added[i] |= (uint8_t)(1 << k);
         }
     }
     for (int i = s->n_ptrack - 1; i >= 0; i--) {
-        if (!s->ptrack[i].seen) close_ptrack(s, i);
-        else s->ptrack[i].seen = 0;
+        gc_ptrack_t *t = &s->ptrack[i];
+        if (t->seen) { t->seen = 0; continue; }
+        use_map(s, t->excl);
+        /* the faces' middle and quarter points along their length */
+        float nx = -t->uy, ny = t->ux, m = t->lm, keep = 1;
+        for (int q = 1; q <= 3 && keep; q++) {
+            float tq = t->t0 + (t->t1 - t->t0) * q / 4;
+            keep = layer_elsewhere(s, t->ux * tq + nx * m, t->uy * tq + ny * m, 0.5f * t->ls, t->z1);
+        }
+        if (!keep) close_ptrack(s, i);
     }
 }
 
@@ -949,11 +1117,12 @@ static void layer_edges(gc_state_t *s, float w, float h)
 static void finish_layer(gc_state_t *s)
 {
     end_path(s);
-    float h = layer_h(s);
+    float h = layer_h_under(s);
     float wc = median_circ_w(s);
     layer_circles(s, wc, h);
     if (GC_TILT) layer_ellipses(s, wc, h);
     if (GC_EDGES) layer_edges(s, median_edge_w(s), h);
+    use_map(s, 0);
     s->n_circ = 0;
     s->n_ell = 0;
     s->n_run = 0;
@@ -964,46 +1133,87 @@ static void new_layer(gc_state_t *s, float z)
     end_path(s);
     if (s->in_layer && s->sampled) finish_layer(s);
     s->prev_z = s->in_layer ? s->layer_z : 0.0f;
+    s->prev_part = s->lx0 <= s->lx1;
+    if (s->prev_part) { s->prev_cx = 0.5f * (s->lx0 + s->lx1); s->prev_cy = 0.5f * (s->ly0 + s->ly1); }
+    s->lx0 = s->ly0 = 1e9f; s->lx1 = s->ly1 = -1e9f;
     s->layer_z = z;
     s->in_layer = 1;
+    if (s->cap.foot_n) {
+        uint32_t bytes = (uint32_t)s->cap.foot_n * s->cap.foot_n / 8;
+        s->foot_cur = (uint8_t)((s->foot_cur + 1) % GC_FOOT_K);
+        memset(s->foot + s->foot_cur * bytes, 0, bytes);
+        s->foot_z[s->foot_cur] = z;
+        s->foot_used |= (uint8_t)(1u << s->foot_cur);
+        memset(s->lvote, 0, sizeof s->lvote);
+        s->foot_under = 0;
+        for (int k = 0; k < GC_FOOT_K; k++) {
+            float dz = z - s->foot_z[k];
+            if (k != s->foot_cur && (s->foot_used >> k & 1) && dz > 0.02f && dz < 1.2f) s->foot_under |= (uint8_t)(1u << k);
+        }
+    }
     s->layer_idx++;
     s->res.layers++;
     s->sampled = (s->layer_idx % (uint32_t)s->stride) == 0;
     if (s->sampled) {
         s->res.sampled++;
         memset(s->map, 0, (size_t)s->cap.map_n * s->cap.map_n / 8);
-        s->map_init = 0;              /* re-centred on this layer's first extrusion (not the purge line) */
+        if (s->smap) memset(s->smap, 0, (size_t)s->cap.map_n * s->cap.map_n / 8);
+        s->map_init = 0;              /* re-centred on this layer's first extrusion (see extrude) */
         s->n_circ = 0;
         s->n_ell = 0;
         s->n_run = 0;
         memset(s->whist, 0, sizeof s->whist);
+        memset(s->whist_other, 0, sizeof s->whist_other);
     }
 }
 
 static void extrude(gc_state_t *s, float x0, float y0, float x1, float y1, float de)
 {
     if (!s->in_layer || fabsf(s->z - s->layer_z) > 1e-4f) new_layer(s, s->z);
-    float h = layer_h(s);
-    if (s->z - h < s->zmin) s->zmin = s->z - h;
-    if (s->z > s->zmax) s->zmax = s->z;
-    if (x1 < s->xmin) s->xmin = x1;
-    if (x1 > s->xmax) s->xmax = x1;
-    if (y1 < s->ymin) s->ymin = y1;
-    if (y1 > s->ymax) s->ymax = y1;
+    int part = !(s->has_roles && s->excluded);     /* labelled support: not the part's extent, not in the map */
+    foot_segment(s, x0, y0, x1, y1);
+    {
+        if (s->z - 1.2f < s->azmin && s->z - layer_h(s) < s->azmin) s->azmin = s->z - layer_h(s);   /* (h < 1.2) */
+        if (s->z > s->azmax) s->azmax = s->z;
+        if (x1 < s->axmin) s->axmin = x1;
+        if (x1 > s->axmax) s->axmax = x1;
+        if (y1 < s->aymin) s->aymin = y1;
+        if (y1 > s->aymax) s->aymax = y1;
+    }
+    if (part) {
+        if (s->z - 1.2f < s->zmin) {
+            float h = layer_h_under(s);
+            if (s->z - h < s->zmin) s->zmin = s->z - h;
+        }
+        if (s->z > s->zmax) s->zmax = s->z;
+        if (x1 < s->xmin) s->xmin = x1;
+        if (x1 > s->xmax) s->xmax = x1;
+        if (y1 < s->ymin) s->ymin = y1;
+        if (y1 > s->ymax) s->ymax = y1;
+        if (x1 < s->lx0) s->lx0 = x1;
+        if (x1 > s->lx1) s->lx1 = x1;
+        if (y1 < s->ly0) s->ly0 = y1;
+        if (y1 > s->ly1) s->ly1 = y1;
+    }
     if (!s->sampled) return;
     if (!s->map_init) {
-        s->map_x0 = x0 - s->cap.map_n * GC_MAP_CELL / 2; s->map_y0 = y0 - s->cap.map_n * GC_MAP_CELL / 2; s->map_init = 1;
+        /* on the middle of the last layer's part material, else on this extrusion (the
+           first extrusion of a layer may be support or a purge line far from a large part) */
+        float cx = s->prev_part ? s->prev_cx : x0, cy = s->prev_part ? s->prev_cy : y0;
+        s->map_x0 = cx - s->cap.map_n * GC_MAP_CELL / 2; s->map_y0 = cy - s->cap.map_n * GC_MAP_CELL / 2;
+        s->map_init = 1;
     }
-    map_segment(s, x0, y0, x1, y1);
+    if (part) map_segment(s, s->map, x0, y0, x1, y1);
+    else if (s->smap) map_segment(s, s->smap, x0, y0, x1, y1);
     path_segment(s, x0, y0, x1, y1, de);
 }
 
 /* ------------------------------------------------------------------ G-code lines */
 
 const gc_caps_t gc_caps_full = {GC_PATH_MAX, GC_MAX_CIRC, GC_MAX_ELL, GC_MAX_RUN, GC_MAX_TRACK, GC_MAX_ETRACK,
-                                GC_MAX_PTRACK, GC_MAX_ELEM, GC_MAP_N};
-const gc_caps_t gc_caps_compact = {256, 96, 48, 160, 48, 16, 40, 128, 256};
-const gc_caps_t gc_caps_tiny = {192, 64, 32, 128, 32, 12, 32, 96, 224};
+                                GC_MAX_PTRACK, GC_MAX_ELEM, GC_MAP_N, GC_FOOT_N, 1};
+const gc_caps_t gc_caps_compact = {256, 96, 48, 256, 48, 16, 40, 128, 256, 64, 1};
+const gc_caps_t gc_caps_tiny = {160, 64, 32, 128, 32, 12, 32, 96, 208, 32, 0};
 
 #define ALIGN8(x) (((x) + 7u) & ~7u)
 
@@ -1023,6 +1233,8 @@ static uint32_t layout(const gc_caps_t *c, gc_state_t *s, uint8_t *base)
     PLACE(run, gc_run_t, c->run);
     PLACE(run_order, uint16_t, c->run);
     PLACE(map, uint8_t, (uint32_t)c->map_n * c->map_n / 8);
+    if (c->smap) PLACE(smap, uint8_t, (uint32_t)c->map_n * c->map_n / 8);
+    PLACE(foot, uint8_t, (uint32_t)GC_FOOT_K * c->foot_n * c->foot_n / 8);
     PLACE(track, gc_track_t, c->track);
     PLACE(etrack, gc_etrack_t, c->etrack);
     PLACE(ptrack, gc_ptrack_t, c->ptrack);
@@ -1043,14 +1255,17 @@ uint32_t gc_state_bytes(const gc_caps_t *caps)
 gc_state_t *gc_init(void *mem, uint32_t bytes, const gc_caps_t *caps, int stride)
 {
     uint32_t need = gc_state_bytes(caps);
-    if (!mem || ((uintptr_t)mem & 7u) || bytes < need || caps->map_n % 8 || !caps->path || !caps->run) return 0;
+    if (!mem || ((uintptr_t)mem & 7u) || bytes < need || caps->map_n % 8 || (caps->foot_n & (caps->foot_n - 1)) || caps->foot_n % 8 || !caps->path || !caps->run) return 0;
     gc_state_t *s = (gc_state_t *)mem;
     memset(mem, 0, need);
     s->cap = *caps;
     layout(caps, s, (uint8_t *)mem);
+    s->mplane = s->map;
     s->abs_xyz = 1; s->abs_e = 1;
     s->stride = stride > 0 ? stride : 1;
     s->zmin = s->xmin = s->ymin = 1e9f; s->zmax = s->xmax = s->ymax = -1e9f;
+    s->azmin = s->axmin = s->aymin = 1e9f; s->azmax = s->axmax = s->aymax = -1e9f;
+    s->lx0 = s->ly0 = 1e9f; s->lx1 = s->ly1 = -1e9f;
     s->layer_idx = (uint32_t)-1;
     return s;
 }
@@ -1125,7 +1340,7 @@ void gc_line(gc_state_t *s, const char *line, int len)
     float x0 = s->x, y0 = s->y;
     s->z = Z;
     int moved = fabsf(X - x0) > 1e-5f || fabsf(Y - y0) > 1e-5f;
-    int extruding = de > 1e-6f && (moved || c >= 2) && !s->excluded && s->has_pos;
+    int extruding = de > 1e-6f && (moved || c >= 2) && s->has_pos;
     if (!extruding) {
         if (moved) end_path(s);
     } else if (c <= 1) {
@@ -1338,6 +1553,9 @@ void gc_finish(gc_state_t *s)
     while (s->n_track) close_track(s, s->n_track - 1);
     while (s->n_etrack) close_etrack(s, s->n_etrack - 1);
     while (s->n_ptrack) close_ptrack(s, s->n_ptrack - 1);
+    if (s->xmin > s->xmax) {          /* everything labelled support: its extent is the print's */
+        s->xmin = s->axmin; s->xmax = s->axmax; s->ymin = s->aymin; s->ymax = s->aymax; s->zmin = s->azmin; s->zmax = s->azmax;
+    }
     /* duplicates (a pin bore through two walls; the same face pair found twice): one element */
     for (int i = 0; i < s->n_elem; i++)
         for (int j = s->n_elem - 1; j > i; j--) {
