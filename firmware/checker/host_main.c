@@ -39,6 +39,8 @@ int main(int argc, char **argv)
         const gc_evid_t *e = &r->evid[i];
         if (e->type == GC_EV_BORE)
             printf("%s\"bore: %s (d %.2f x %.0f mm)\"", i ? ", " : "", gc_bore_name(e->ref), e->d, e->len);
+        else if (e->type == GC_EV_PLATFORM)
+            printf("%s\"platform: %s (d %.2f, %.2f mm apart)\"", i ? ", " : "", gc_pin_pair_name(e->ref), e->d, e->len);
         else
             printf("%s\"%s: %s %d/%d\"", i ? ", " : "", e->type == GC_EV_DESIGN ? "design" : e->type == GC_EV_SCALED ? "scaled" : "lineage",
                    gc_part_name(e->ref), e->fired, e->n);

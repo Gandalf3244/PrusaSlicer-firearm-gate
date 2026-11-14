@@ -126,7 +126,7 @@ typedef struct {
 } gc_ptrack_t;
 typedef struct { float a[3], c[3], d, L, fill; uint8_t kind; } gc_elem_t;   /* fill: length with wall (coaxial pieces merged) */
 
-enum { GC_EV_DESIGN = 0, GC_EV_LINEAGE = 1, GC_EV_BORE = 2, GC_EV_SCALED = 3 };
+enum { GC_EV_DESIGN = 0, GC_EV_LINEAGE = 1, GC_EV_BORE = 2, GC_EV_SCALED = 3, GC_EV_PLATFORM = 4 };   /* platform: a known pin pair, ref = gc_pin_pair_name */
 typedef struct { uint8_t type, fired, n; int16_t ref; float d, len; } gc_evid_t;
 
 typedef struct {
@@ -137,6 +137,7 @@ typedef struct {
     uint32_t lines, layers, sampled, loops, circles, elements;
     uint32_t v_cyl, h_cyl, slabs, t_slabs, pairs, ellipses, t_cyl;
     uint16_t max_circ, max_track, max_run, max_ptrack, max_ell, max_etrack;
+    uint8_t pin_pairs;            /* a platform pin pair was reported */
     uint8_t overflow;             /* bit 0 circles, 1 tracks, 2 elements, 3 runs, 4 pair tracks, 5 ellipses,
                                      6 tilted tracks dropped (never a crash) */
 } gc_result_t;
@@ -223,6 +224,7 @@ void gc_line(gc_state_t *s, const char *line, int len);
 void gc_finish(gc_state_t *s);
 const char *gc_part_name(int ref);
 const char *gc_bore_name(int ref);
+const char *gc_pin_pair_name(int ref);
 
 #ifdef __cplusplus
 }

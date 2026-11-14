@@ -1378,6 +1378,12 @@ static void add_evid(gc_state_t *s, uint8_t type, int ref, uint8_t fired, uint8_
 
 static int is_slab(uint8_t k) { return k == GC_WALL || k == GC_SLOT; }
 
+typedef struct { float d_lo, d_hi, sep_lo, sep_hi; const char *name; } pin_pair_t;
+static const pin_pair_t PIN_PAIRS[] = {
+    {3.85f, 4.05f, 22.70f, 23.00f, "AR-15/AR-10 hammer+trigger pins (0.154 in)"},
+    {6.30f, 7.05f, 161.0f, 163.5f, "AR-15 takedown+pivot pins (0.250 in)"},
+};
+
 /* fingerprint.hole_relation: (angle deg, separation mm), pose invariant */
 static void relation(const gc_elem_t *e1, const gc_elem_t *e2, float *ang, float *sep)
 {
@@ -1604,6 +1610,26 @@ void gc_finish(gc_state_t *s)
             add_evid(s, bnd ? GC_EV_LINEAGE : GC_EV_DESIGN, p, fired[p], P->n_variants, 0, 0);
         }
     }
+    /* known platform pin pairs (pipeline.calibers.PLATFORM_PAIRS): two parallel holes of a
+       standard size at a firearm-specific spacing - every AR lower that takes mil-spec parts
+       has them, whoever drew it. Windows widened by 0.05 mm for G-code centres; on the
+       sliced negatives no pair of 3.80-4.10 mm holes lies within 22.4-23.3 mm. */
+    for (int i = 0; i < s->n_elem; i++)
+        for (int j = i + 1; j < s->n_elem; j++) {
+            const gc_elem_t *a = &s->elem[i], *b = &s->elem[j];
+            if (a->kind != GC_HOLE || b->kind != GC_HOLE) continue;
+            float ang, sep;
+            relation(a, b, &ang, &sep);
+            if (ang >= 1.0f) continue;
+            for (int k = 0; k < (int)(sizeof PIN_PAIRS / sizeof PIN_PAIRS[0]); k++) {
+                const pin_pair_t *pp = &PIN_PAIRS[k];
+                if (a->d >= pp->d_lo && a->d <= pp->d_hi && b->d >= pp->d_lo && b->d <= pp->d_hi
+                    && sep >= pp->sep_lo && sep <= pp->sep_hi && !s->res.pin_pairs) {
+                    s->res.pin_pairs = 1;
+                    add_evid(s, GC_EV_PLATFORM, k, 0, 0, 0.5f * (a->d + b->d), sep);
+                }
+            }
+        }
     /* barrel bore: a long hole at a bullet diameter that, with its coaxial holes (chamber),
        covers the part's whole extent along its axis (vertical: height; horizontal: the
        print's footprint along the axis, an upper bound on the part's length) */
@@ -1655,3 +1681,4 @@ void gc_finish(gc_state_t *s)
 
 const char *gc_part_name(int ref) { return ref >= 0 && ref < FP_N_PARTS ? FP_PARTS[ref].name : "?"; }
 const char *gc_bore_name(int ref) { return ref >= 0 && ref < BORE_N_BULLETS ? BORE_NAMES[ref] : "?"; }
+const char *gc_pin_pair_name(int ref) { return ref >= 0 && ref < (int)(sizeof PIN_PAIRS / sizeof PIN_PAIRS[0]) ? PIN_PAIRS[ref].name : "?"; }

@@ -40,15 +40,16 @@ geometry. Flash use goes from 1.21 to 1.37 MB of 1.9 MB. Built 2026-11-14.
 
 The checker sees holes, bosses, walls and slots in the layers of the G-code - vertical, lying
 flat and tilted - and matches them against fingerprints of the same reference library as the
-slicer gate (514 of its parts have usable fingerprints). On G-code sliced from the library and from
+slicer gate (514 of its parts have usable fingerprints), plus the AR hammer + trigger pin
+spacing that every AR lower shares, whoever designed it. On G-code sliced from the library and from
 1721 non-gun files with four slicer setups, at the 34 KB size an MK4 uses (2026-11-14):
 
 | slicer setup | gun files blocked | comments stripped | every label rewritten to "support" |
 |---|---|---|---|
-| Cura, Ender-3, flat | 154 / 551 | 116 / 551 | 98 / 551 |
-| PrusaSlicer 0.4 mm, flat | 168 / 551 | 142 / 551 | 116 / 551 |
-| PrusaSlicer 0.6 mm, as modelled | 170 / 551 | 135 / 551 | 84 / 551 |
-| OrcaSlicer X1C, random rotation | 68 / 551 | 38 / 551 | 44 / 551 |
+| Cura, Ender-3, flat | 162 / 551 | 131 / 551 | 116 / 551 |
+| PrusaSlicer 0.4 mm, flat | 177 / 551 | 153 / 551 | 134 / 551 |
+| PrusaSlicer 0.6 mm, as modelled | 185 / 551 | 143 / 551 | 96 / 551 |
+| OrcaSlicer X1C, random rotation | 71 / 551 | 40 / 551 | 44 / 551 |
 | non-gun files blocked | **0 / 1721** | **0 / 1721** | **0 / 1721** |
 
 (The 2026-09-26 build: 142 / 158 / 181 / 62 with comments, 84 / 104 / 69 / 34 stripped, and 0 with

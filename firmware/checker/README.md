@@ -72,11 +72,15 @@ One pass over the G-code, one line at a time (`gc_line`), no dynamic memory:
    Charon lower got a Revenant frame's label); a horizontal cylinder (chord-fitted diameter) does
    not complete a two-element lineage match (a buffer tower got an STI frame's label); the
    same holds for tilted ones.
-9. **Bore** - a hole at a bullet diameter, >= 25 mm and 4 d long, >= 30 % of it with wall
+9. **Platform pin pairs** (2026-11-14) - two parallel holes of 3.85-4.05 mm whose axes lie
+   22.70-23.00 mm apart (the AR hammer + trigger pins, 0.154" / 0.899"), or 6.30-7.05 mm holes
+   161-163.5 mm apart (takedown + pivot pins): `GC_EV_PLATFORM`, no library part involved. On the
+   sliced negatives no pair of 3.80-4.10 mm holes lies within 22.4-23.3 mm.
+10. **Bore** - a hole at a bullet diameter, >= 25 mm and 4 d long, >= 30 % of it with wall
    (`BORE_MIN_FILL`), whose coaxial holes cover >= 84 % of the part's extent along its axis
    (any axis: the print's bounding box projected on it; `pipeline.calibers` rules and tables).
 
-10. **Scaled pass** (`GC_SCALED`, 2026-11-13) - only when nothing above fired: the fingerprints
+11. **Scaled pass** (`GC_SCALED`, 2026-11-13) - only when nothing above fired: the fingerprints
    again at a free uniform scale in `GC_SCALE_LO .. GC_SCALE_HI` (0.95 .. 1.05; a part resized
    before slicing), carrying the interval of scales every diameter and separation allows; TIGHT
    residuals after the scale; a part needs a fingerprint of >= `GC_SCALED_ALONE` (3) elements or
@@ -100,6 +104,7 @@ or every outer wall to an inner one.
 | labelled | 157 / 73 / 179 / 191 = 600 | 162 / 69 / 177 / 200 = **608** | 575 | 154 / 68 / 168 / 170 = 560 | 528 (was 520) |
 | comments stripped | 88 / 36 / 113 / 78 = 315 | 121 / 39 / 143 / 160 = **463** | 446 (was 277) | 116 / 38 / 142 / 135 = 431 | 416 (was 275) |
 | everything relabelled support | **0** | 117 / 39 / 142 / 151 = **449** | 438 | 98 / 44 / 116 / 84 = 342 | 333 |
+| + pin pairs (item 9): labelled / stripped / relabelled | | **639 / 495 / 486** | | **595 / 467 / 390** | |
 | outer walls relabelled inner | 439 | 565 | | |
 | every 2nd layer, labelled / stripped | | 581 / 449 | | |
 

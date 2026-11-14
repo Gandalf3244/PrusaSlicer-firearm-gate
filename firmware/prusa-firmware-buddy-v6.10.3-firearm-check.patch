@@ -267,10 +267,10 @@ index 00000000..1b581f9e
 +endif()
 diff --git a/src/common/firearm_check/firearm_check.cpp b/src/common/firearm_check/firearm_check.cpp
 new file mode 100644
-index 00000000..4c80a31c
+index 00000000..44c73635
 --- /dev/null
 +++ b/src/common/firearm_check/firearm_check.cpp
-@@ -0,0 +1,244 @@
+@@ -0,0 +1,245 @@
 +/// @file
 +#include "firearm_check.hpp"
 +
@@ -502,7 +502,8 @@ index 00000000..4c80a31c
 +        static_cast<unsigned>(res.layers), static_cast<unsigned>(res.elements), res.block);
 +    for (int i = 0; i < res.n_evid; i++) {
 +        const gc_evid_t &e = res.evid[i];
-+        log_info(FirearmCheck, "evidence: %s", e.type == GC_EV_BORE ? gc_bore_name(e.ref) : gc_part_name(e.ref));
++        log_info(FirearmCheck, "evidence: %s", e.type == GC_EV_BORE ? gc_bore_name(e.ref) : e.type == GC_EV_PLATFORM ? gc_pin_pair_name(e.ref)
++                                                                                                                     : gc_part_name(e.ref));
 +    }
 +    const bool block = res.block;
 +    free(mem);
@@ -6983,10 +6984,10 @@ index 00000000..e5e575a9
 +#endif
 diff --git a/src/common/firearm_check/gcheck.c b/src/common/firearm_check/gcheck.c
 new file mode 100644
-index 00000000..fad41ef0
+index 00000000..3e3e81fd
 --- /dev/null
 +++ b/src/common/firearm_check/gcheck.c
-@@ -0,0 +1,1657 @@
+@@ -0,0 +1,1684 @@
 +/* gcheck - see gcheck.h. C99, no dynamic memory, libm only. */
 +#include "gcheck.h"
 +
@@ -8367,6 +8368,12 @@ index 00000000..fad41ef0
 +
 +static int is_slab(uint8_t k) { return k == GC_WALL || k == GC_SLOT; }
 +
++typedef struct { float d_lo, d_hi, sep_lo, sep_hi; const char *name; } pin_pair_t;
++static const pin_pair_t PIN_PAIRS[] = {
++    {3.85f, 4.05f, 22.70f, 23.00f, "AR-15/AR-10 hammer+trigger pins (0.154 in)"},
++    {6.30f, 7.05f, 161.0f, 163.5f, "AR-15 takedown+pivot pins (0.250 in)"},
++};
++
 +/* fingerprint.hole_relation: (angle deg, separation mm), pose invariant */
 +static void relation(const gc_elem_t *e1, const gc_elem_t *e2, float *ang, float *sep)
 +{
@@ -8593,6 +8600,26 @@ index 00000000..fad41ef0
 +            add_evid(s, bnd ? GC_EV_LINEAGE : GC_EV_DESIGN, p, fired[p], P->n_variants, 0, 0);
 +        }
 +    }
++    /* known platform pin pairs (pipeline.calibers.PLATFORM_PAIRS): two parallel holes of a
++       standard size at a firearm-specific spacing - every AR lower that takes mil-spec parts
++       has them, whoever drew it. Windows widened by 0.05 mm for G-code centres; on the
++       sliced negatives no pair of 3.80-4.10 mm holes lies within 22.4-23.3 mm. */
++    for (int i = 0; i < s->n_elem; i++)
++        for (int j = i + 1; j < s->n_elem; j++) {
++            const gc_elem_t *a = &s->elem[i], *b = &s->elem[j];
++            if (a->kind != GC_HOLE || b->kind != GC_HOLE) continue;
++            float ang, sep;
++            relation(a, b, &ang, &sep);
++            if (ang >= 1.0f) continue;
++            for (int k = 0; k < (int)(sizeof PIN_PAIRS / sizeof PIN_PAIRS[0]); k++) {
++                const pin_pair_t *pp = &PIN_PAIRS[k];
++                if (a->d >= pp->d_lo && a->d <= pp->d_hi && b->d >= pp->d_lo && b->d <= pp->d_hi
++                    && sep >= pp->sep_lo && sep <= pp->sep_hi && !s->res.pin_pairs) {
++                    s->res.pin_pairs = 1;
++                    add_evid(s, GC_EV_PLATFORM, k, 0, 0, 0.5f * (a->d + b->d), sep);
++                }
++            }
++        }
 +    /* barrel bore: a long hole at a bullet diameter that, with its coaxial holes (chamber),
 +       covers the part's whole extent along its axis (vertical: height; horizontal: the
 +       print's footprint along the axis, an upper bound on the part's length) */
@@ -8644,12 +8671,13 @@ index 00000000..fad41ef0
 +
 +const char *gc_part_name(int ref) { return ref >= 0 && ref < FP_N_PARTS ? FP_PARTS[ref].name : "?"; }
 +const char *gc_bore_name(int ref) { return ref >= 0 && ref < BORE_N_BULLETS ? BORE_NAMES[ref] : "?"; }
++const char *gc_pin_pair_name(int ref) { return ref >= 0 && ref < (int)(sizeof PIN_PAIRS / sizeof PIN_PAIRS[0]) ? PIN_PAIRS[ref].name : "?"; }
 diff --git a/src/common/firearm_check/gcheck.h b/src/common/firearm_check/gcheck.h
 new file mode 100644
-index 00000000..6cc8cd96
+index 00000000..d7b210d3
 --- /dev/null
 +++ b/src/common/firearm_check/gcheck.h
-@@ -0,0 +1,231 @@
+@@ -0,0 +1,233 @@
 +/* gcheck - streaming firearm-part check of sliced G-code for small microcontrollers.
 + *
 + * Feed the G-code one line at a time (gc_line), then call gc_finish. All state
@@ -8778,7 +8806,7 @@ index 00000000..6cc8cd96
 +} gc_ptrack_t;
 +typedef struct { float a[3], c[3], d, L, fill; uint8_t kind; } gc_elem_t;   /* fill: length with wall (coaxial pieces merged) */
 +
-+enum { GC_EV_DESIGN = 0, GC_EV_LINEAGE = 1, GC_EV_BORE = 2, GC_EV_SCALED = 3 };
++enum { GC_EV_DESIGN = 0, GC_EV_LINEAGE = 1, GC_EV_BORE = 2, GC_EV_SCALED = 3, GC_EV_PLATFORM = 4 };   /* platform: a known pin pair, ref = gc_pin_pair_name */
 +typedef struct { uint8_t type, fired, n; int16_t ref; float d, len; } gc_evid_t;
 +
 +typedef struct {
@@ -8789,6 +8817,7 @@ index 00000000..6cc8cd96
 +    uint32_t lines, layers, sampled, loops, circles, elements;
 +    uint32_t v_cyl, h_cyl, slabs, t_slabs, pairs, ellipses, t_cyl;
 +    uint16_t max_circ, max_track, max_run, max_ptrack, max_ell, max_etrack;
++    uint8_t pin_pairs;            /* a platform pin pair was reported */
 +    uint8_t overflow;             /* bit 0 circles, 1 tracks, 2 elements, 3 runs, 4 pair tracks, 5 ellipses,
 +                                     6 tilted tracks dropped (never a crash) */
 +} gc_result_t;
@@ -8875,6 +8904,7 @@ index 00000000..6cc8cd96
 +void gc_finish(gc_state_t *s);
 +const char *gc_part_name(int ref);
 +const char *gc_bore_name(int ref);
++const char *gc_pin_pair_name(int ref);
 +
 +#ifdef __cplusplus
 +}
