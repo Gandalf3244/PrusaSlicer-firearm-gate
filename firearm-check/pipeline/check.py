@@ -41,7 +41,8 @@ import trimesh
 
 from .calibers import bore_evidence
 from .detect import detect, load_fingerprints, signature_of_mesh
-from .families import family_matches, load_family_patterns
+from .families import family_matches, load_family_patterns, platform_pairs
+from .fingerprint import elements
 from .pool import trim_after
 from .resize import resized_scales, resized_signature
 from .roles import is_grip, role_of
@@ -152,6 +153,10 @@ class Library:
             pats = [p for p in self.patterns if p.family == fam]
             if self._holds_unresized(sig, ms, lambda s2, pats=pats: family_matches(s2, pats)):
                 out.append(Evidence("platform", f"{fam} platform pattern x{len(ms)}", "", "", "", 1.0, body))
+        # known platform pin pairs: not a guessed transform (a pair 0.2 mm wide in separation
+        # is not evidence at a wild scale)
+        for name in [] if guessed else sorted(set(platform_pairs(elements(sig, 0.9)))):
+            out.append(Evidence("platform", f"platform pin pair: {name}", "", "", "", 1.0, body))
         for b in bore_evidence(sig, mesh) if bores else []:
             out.append(Evidence("bore", f"barrel bore {b['caliber']} (Ø{b['d']:.2f} x {b['L']:.0f} mm)", "", "", "barrel", 1.0, body))
         return out

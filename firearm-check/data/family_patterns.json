@@ -512,7 +512,7 @@
 {
 "family": "1911",
 "source": "Pistols/1911-Barrel_Bushing_and_Compensator-Daviot/STL/1911_Barrel_Bushing+Compensator.stl",
-"size": 2,
+"size": 3,
 "holes": [
 {
 "d": 17.678,
@@ -549,10 +549,115 @@
 1.0
 ],
 "kind": "hole"
+},
+{
+"kind": "wall",
+"d": 2.311,
+"L": 19.05,
+"cov": 1.0,
+"area": 100.0,
+"c": [
+0.0,
+-3.923,
+19.927
+],
+"a": [
+0.0,
+0.0,
+1.0
+]
 }
 ],
 "relations": {
 "0-1": [
+0.0,
+0.0
+],
+"0-2": [
+0.0,
+0.0
+],
+"1-2": [
+0.0,
+0.0
+]
+},
+"n_models": 3,
+"models": [
+"1911-Barrel_Bushing-Daviot",
+"1911-Barrel_Bushing_and_Compensator-Daviot",
+"1911_DEFCAD-DefenseDistributed"
+]
+},
+{
+"family": "1911",
+"source": "Pistols/1911-Barrel_Bushing_and_Compensator-Daviot/STL/1911_Barrel_Bushing+Compensator.stl",
+"size": 3,
+"holes": [
+{
+"d": 17.678,
+"L": 31.75,
+"cov": 0.99,
+"area": 1588.0,
+"rms": 0.0001,
+"c": [
+-0.0,
+2.15,
+36.957
+],
+"a": [
+0.0,
+0.0,
+1.0
+],
+"kind": "boss"
+},
+{
+"d": 15.494,
+"L": 34.06,
+"cov": 0.99,
+"area": 1460.4,
+"rms": 0.0003,
+"c": [
+0.0,
+2.15,
+35.801
+],
+"a": [
+0.0,
+-3e-05,
+1.0
+],
+"kind": "hole"
+},
+{
+"kind": "wall",
+"d": 21.082,
+"L": 19.05,
+"cov": 1.0,
+"area": 47.0,
+"c": [
+0.0,
+-0.887,
+10.541
+],
+"a": [
+0.0,
+0.0,
+1.0
+]
+}
+],
+"relations": {
+"0-1": [
+0.0,
+0.0
+],
+"0-2": [
+0.0,
+0.0
+],
+"1-2": [
 0.0,
 0.0
 ]
@@ -1640,6 +1745,470 @@
 "AR-15_FOSSCAD_Trigger_Module_with_Compatible_Lowers-shadowfall",
 "AR-15_Single_Shot_Upper_Receiver_v2.0-Proteus",
 "AR-15_Sisyphus_Cali_Grip_Adapter-WarFairy"
+]
+},
+{
+"family": "AR",
+"source": "Rifles/AR-15_Sisyphus_Cali_Grip_Adapter-WarFairy/STL/Dummy_Buffer_Tube.stl",
+"size": 2,
+"holes": [
+{
+"d": 5.105,
+"L": 5.0,
+"cov": 1.0,
+"area": 79.7,
+"rms": 0.0005,
+"c": [
+18.589,
+39.052,
+81.933
+],
+"a": [
+-0.0,
+0.86604,
+0.49998
+],
+"kind": "hole"
+},
+{
+"d": 28.563,
+"L": 1.97,
+"cov": 0.99,
+"area": 18.8,
+"rms": 0.0069,
+"c": [
+18.589,
+35.163,
+25.302
+],
+"a": [
+-0.00055,
+0.00015,
+1.0
+],
+"kind": "hole"
+}
+],
+"relations": {
+"0-1": [
+59.993,
+0.03
+]
+},
+"n_models": 4,
+"models": [
+"9mm_Gluty_AR-15_Pistol-unnamed",
+"AR-15_FOSSCAD_Trigger_Module_with_Compatible_Lowers-shadowfall",
+"AR-15_Single_Shot_Upper_Receiver_v2.0-Proteus",
+"AR-15_Sisyphus_Cali_Grip_Adapter-WarFairy"
+]
+},
+{
+"family": "AR",
+"source": "Rifles/AR_Target_Trigger_LTS-raptor/STL/Stock_trigger_AR_semi.STL",
+"size": 3,
+"holes": [
+{
+"d": 7.976,
+"L": 6.76,
+"cov": 1.0,
+"area": 130.0,
+"rms": 0.0,
+"c": [
+30.48,
+39.065,
+3.505
+],
+"a": [
+0.0,
+0.0,
+1.0
+],
+"kind": "boss"
+},
+{
+"d": 3.912,
+"L": 6.88,
+"cov": 1.0,
+"area": 76.7,
+"rms": 0.0,
+"c": [
+30.48,
+39.065,
+3.442
+],
+"a": [
+0.0,
+0.0,
+1.0
+],
+"kind": "hole"
+},
+{
+"d": 4.089,
+"L": 6.86,
+"cov": 1.0,
+"area": 41.9,
+"rms": 0.0,
+"c": [
+15.037,
+37.287,
+8.509
+],
+"a": [
+0.0,
+-1.0,
+0.0
+],
+"kind": "hole"
+}
+],
+"relations": {
+"0-1": [
+0.0,
+0.0
+],
+"0-2": [
+90.0,
+15.443
+],
+"1-2": [
+90.0,
+15.443
+]
+},
+"n_models": 3,
+"models": [
+"AR-15_Trigger_LTS_Precision",
+"AR-15_trigger_LTS_skeletonized_racegun",
+"AR_Target_Trigger_LTS-raptor"
+]
+},
+{
+"family": "AR",
+"source": "Pistols/9mm_Shuty_AR-15_Pistol_v2.0-derwood/STL/AR15GRIP.stl",
+"size": 3,
+"holes": [
+{
+"d": 7.0,
+"L": 5.0,
+"cov": 1.0,
+"area": 109.8,
+"rms": 0.0,
+"c": [
+27.722,
+88.428,
+14.046
+],
+"a": [
+-0.50172,
+0.86503,
+0.0
+],
+"kind": "hole"
+},
+{
+"d": 2.8,
+"L": 10.0,
+"cov": 1.0,
+"area": 87.9,
+"rms": 0.0,
+"c": [
+19.723,
+105.122,
+6.677
+],
+"a": [
+0.0,
+-1.0,
+0.0
+],
+"kind": "hole"
+},
+{
+"kind": "slot",
+"d": 12.0,
+"L": 37.99,
+"cov": 1.0,
+"area": 3003.8,
+"c": [
+54.324,
+51.874,
+14.046
+],
+"a": [
+-0.0,
+-0.0,
+1.0
+]
+}
+],
+"relations": {
+"0-1": [
+30.114,
+7.369
+],
+"0-2": [
+90.0,
+0.0
+],
+"1-2": [
+90.0,
+7.369
+]
+},
+"n_models": 3,
+"models": [
+"9mm_Shuty_AR-15_Pistol_v2.0-derwood",
+"AR-15_Grip-7777773",
+"AR_Style_Grip_for_Lower_Reciever"
+]
+},
+{
+"family": "AR",
+"source": "Pistols/9mm_Shuty_AR-15_Pistol_v2.0-derwood/STL/AR15GRIP.stl",
+"size": 3,
+"holes": [
+{
+"d": 7.0,
+"L": 5.0,
+"cov": 1.0,
+"area": 109.8,
+"rms": 0.0,
+"c": [
+27.722,
+88.428,
+14.046
+],
+"a": [
+-0.50172,
+0.86503,
+0.0
+],
+"kind": "hole"
+},
+{
+"d": 2.8,
+"L": 10.0,
+"cov": 1.0,
+"area": 87.9,
+"rms": 0.0,
+"c": [
+19.723,
+105.122,
+6.677
+],
+"a": [
+0.0,
+-1.0,
+0.0
+],
+"kind": "hole"
+},
+{
+"kind": "slot",
+"d": 10.5,
+"L": 37.99,
+"cov": 1.0,
+"area": 625.8,
+"c": [
+38.975,
+75.808,
+14.796
+],
+"a": [
+-0.0,
+-0.0,
+1.0
+]
+}
+],
+"relations": {
+"0-1": [
+30.114,
+7.369
+],
+"0-2": [
+90.0,
+0.75
+],
+"1-2": [
+90.0,
+8.119
+]
+},
+"n_models": 3,
+"models": [
+"9mm_Shuty_AR-15_Pistol_v2.0-derwood",
+"AR-15_Grip-7777773",
+"AR_Style_Grip_for_Lower_Reciever"
+]
+},
+{
+"family": "AR",
+"source": "Rifles/AR-15_Telescopic-Stock/STL/User_Library-Telescopic_Stock_Telescopic_Stock_Tube1.stl",
+"size": 2,
+"holes": [
+{
+"d": 25.4,
+"L": 177.8,
+"cov": 0.98,
+"area": 14115.2,
+"rms": 0.0008,
+"c": [
+15.608,
+15.201,
+88.9
+],
+"a": [
+0.0,
+-1e-05,
+1.0
+],
+"kind": "hole"
+},
+{
+"d": 29.846,
+"L": 165.84,
+"cov": 0.99,
+"area": 5026.8,
+"rms": 0.0006,
+"c": [
+15.608,
+15.202,
+117.099
+],
+"a": [
+-0.0,
+1e-05,
+1.0
+],
+"kind": "boss"
+}
+],
+"relations": {
+"0-1": [
+0.001,
+0.001
+]
+},
+"n_models": 3,
+"models": [
+"9mm_Shuty_AR-15_Pistol_v2.0-derwood",
+"AR-15A3_Colt_DEFCAD-DefenseDistributed",
+"AR-15_Telescopic-Stock"
+]
+},
+{
+"family": "AR",
+"source": "Rifles/AR-15A3_Colt_DEFCAD-DefenseDistributed/STL/AR15_barrel_extension.stl",
+"size": 2,
+"holes": [
+{
+"d": 25.338,
+"L": 20.92,
+"cov": 0.98,
+"area": 1664.2,
+"rms": 0.0099,
+"c": [
+0.0,
+0.0,
+17.852
+],
+"a": [
+-0.0,
+-1e-05,
+1.0
+],
+"amb": true,
+"kind": "boss"
+},
+{
+"d": 29.718,
+"L": 3.33,
+"cov": 1.0,
+"area": 310.4,
+"rms": 0.0,
+"c": [
+0.0,
+0.0,
+1.664
+],
+"a": [
+0.0,
+0.0,
+-1.0
+],
+"amb": true,
+"kind": "boss"
+}
+],
+"relations": {
+"0-1": [
+0.0,
+0.0
+]
+},
+"n_models": 3,
+"models": [
+"9mm_Shuty_AR-15_Pistol_v2.0-derwood",
+"AR-10_DEFCAD-DefenseDistributed",
+"AR-15A3_Colt_DEFCAD-DefenseDistributed"
+]
+},
+{
+"family": "AR",
+"source": "Pistols/9mm_Shuty_AR-15_Pistol_v2.0-derwood/STL/buffer_retainer_bolt.stl",
+"size": 2,
+"holes": [
+{
+"d": 25.4,
+"L": 30.24,
+"cov": 1.0,
+"area": 2412.1,
+"rms": 0.0,
+"c": [
+0.0,
+-0.0,
+-179.787
+],
+"a": [
+0.0,
+0.0,
+-1.0
+],
+"kind": "hole"
+},
+{
+"d": 29.718,
+"L": 3.81,
+"cov": 1.0,
+"area": 355.6,
+"rms": 0.0,
+"c": [
+-0.0,
+0.0,
+-162.763
+],
+"a": [
+-0.0,
+0.0,
+-1.0
+],
+"kind": "boss"
+}
+],
+"relations": {
+"0-1": [
+0.0,
+0.0
+]
+},
+"n_models": 3,
+"models": [
+"9mm_Shuty_AR-15_Pistol_v2.0-derwood",
+"AR-10_DEFCAD-DefenseDistributed",
+"AR-15A3_Colt_DEFCAD-DefenseDistributed"
 ]
 }
 ],
