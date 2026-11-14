@@ -214,6 +214,59 @@ def bore_candidates(sig: dict) -> list[dict]:
     return out
 
 
+# A metric part resized in the slicer (shrink compensation, +-2..5 %) moves a
+# rod or clearance hole out of the refusal windows above and into a bullet
+# window: a Prusa MINI z-carriage's 8.2 mm rod hole at x1.02 is an 8.36 mm
+# "7.62x39 bore", a Voron z-drive's 5.4 mm hole at x1.05 a ".22 bore", a spool
+# holder's 8.6 mm hole at x1.05 a "9 mm bore" (scripts/resize_cut.py
+# --negatives). Such a part gives itself away: divided by the scale it was
+# resized by, its other dimensions are round again. So a bore is refused when
+# some original diameter d / s (s in RESIZE_RANGE, on the 0.1 mm grid) is one
+# the rules above refuse, and at that same s the part's other diameters and
+# wall / slot widths snap to the 0.1 mm grid far better than as given. Only the
+# hypotheses that make the bore a refused size are tried (a handful, not a
+# search over s, which finds spurious fits on gun parts with few dimensions);
+# a resized metric barrel is safe because at its true scale the bore is a
+# bullet diameter.
+RESIZE_RANGE = (0.94, 1.06)
+RESIZE_GRID = 0.1            # mm: printer-part dimensions (8.2 rod clearance, 3.4, 5.4 ...)
+RESIZE_INCH_GRID = 0.005 * IN   # an inch design as given (0.200 / 0.250 / 0.350 / 0.360 in: a Hydra
+                                # barrel's dimensions also land on the mm grid at x1.0159) is not resized
+RESIZE_SNAP = 0.003          # mm: a value within this of the grid is round
+RESIZE_MIN_VALUES = 8        # other dimensions needed to judge
+RESIZE_MIN_SCORE = 0.4       # share round at the hypothesis ...
+RESIZE_MIN_GAIN = 0.3        # ... and this much more than as given
+
+
+def _round_share(v: np.ndarray, s: float, grid: float = RESIZE_GRID) -> float:
+    q = v / s / grid
+    return float(np.mean(np.abs(q - np.round(q)) * grid <= RESIZE_SNAP))
+
+
+def resized_refused(sig: dict, bore: dict) -> float | None:
+    """The scale s at which `bore` is a refused size of a resized metric part
+    (see RESIZE_RANGE), or None."""
+    from .fingerprint import slab_elements
+    vals = [h["d"] for h in sig.get("holes", []) + sig.get("bosses", [])
+            if h.get("cov", 0) >= 0.9 and h["d"] >= 1.0 and h is not bore]
+    vals += [e["d"] for e in slab_elements(sig)]
+    v = np.unique(np.round(np.asarray(vals, float), 4))
+    if len(v) < RESIZE_MIN_VALUES:
+        return None
+    d, L = bore["d"], bore.get("L", 0.0)
+    base = max(_round_share(v, 1.0), _round_share(v, 1.0, RESIZE_INCH_GRID))
+    lo, hi = RESIZE_RANGE
+    for k in range(int(np.ceil(d / hi / RESIZE_GRID)), int(np.floor(d / lo / RESIZE_GRID)) + 1):
+        d0 = k * RESIZE_GRID
+        s = d / d0
+        if abs(s - 1) <= RESIZE_SNAP / max(d, 1.0) or bore_match(d0, L / s) is not None:
+            continue                        # as given, or a bullet diameter at that size
+        sh = _round_share(v, s)
+        if sh >= RESIZE_MIN_SCORE and sh - base >= RESIZE_MIN_GAIN:
+            return s
+    return None
+
+
 def bore_evidence(sig: dict, mesh=None) -> list[dict]:
     """Part-type-level evidence independent of any reference design: a barrel
     bore, whatever the design around it. Two features, both always present on
@@ -230,7 +283,8 @@ def bore_evidence(sig: dict, mesh=None) -> list[dict]:
     holes = sig.get("holes", [])
     out = []
     for b in bore_candidates(sig):
-        span = axial_span(b.pop("hole"), holes, mesh)
-        if span >= BORE_MIN_SPAN:
+        h = b.pop("hole")
+        span = axial_span(h, holes, mesh)
+        if span >= BORE_MIN_SPAN and resized_refused(sig, h) is None:
             out.append({**b, "span": round(span, 3)})
     return out
