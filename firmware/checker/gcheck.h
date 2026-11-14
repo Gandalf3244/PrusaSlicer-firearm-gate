@@ -31,8 +31,10 @@ extern "C" {
 #endif
 
 #ifndef GC_LOOSE_SKIP
-#define GC_LOOSE_SKIP 7          /* flags matching at design level only: M3-size pairs, stepped tubes, equal pairs */
+#define GC_LOOSE_SKIP 15         /* flags matching at design level only: M3-size pairs, stepped tubes, equal pairs,
+                                    slab-only (drill-proof) fingerprints */
 #endif
+#define GC_FLAG_SLABS 8          /* table flag: slab-only (drill-proof) fingerprint, scripts/mcu_table.py */
 #ifndef GC_SKIP_ALWAYS
 #define GC_SKIP_ALWAYS 4         /* flags never matched: equal pairs (a Charon lower matched a Revenant frame) */
 #endif
@@ -81,7 +83,7 @@ extern "C" {
 #define GC_NBIN 90               /* edge direction bins (2 deg) */
 #define GC_WHIST 190             /* bead-width histogram bins (0.10 - 2.00 mm) */
 #define GC_MAX_EVID 8            /* evidence lines reported */
-#define GC_MAX_PARTS 512         /* parts in fp_table.h (per-part counters while matching) */
+#define GC_MAX_PARTS 640         /* parts in fp_table.h (per-part counters while matching; 514 with drill-proof fingerprints) */
 #ifndef GC_MAP_N
 #define GC_MAP_N 320             /* occupancy bitmap: GC_MAP_N x GC_MAP_N cells (a multiple of 8) ... */
 #endif

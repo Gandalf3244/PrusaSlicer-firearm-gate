@@ -122,12 +122,17 @@ class Library:
         scales = sorted({round(s, 6) for m in matched for s in resized_scales(sig, m)})
         return not scales or any(bool(ask(resized_signature(sig, s))) for s in scales)
 
-    def evidence_for(self, sig: dict, body: str, bores: bool = True, mesh=None) -> list[Evidence]:
+    def evidence_for(self, sig: dict, body: str, bores: bool = True, mesh=None, guessed: bool = False) -> list[Evidence]:
         """`bores=False` at a guessed unit scale: a bore is a single dimension,
         and a PCB DIN clip's Ø1.9 x 9.6 mm hole read at x10 is a "12-gauge barrel".
-        `mesh` = the mesh `sig` was fitted on (the bore must span it)."""
+        `mesh` = the mesh `sig` was fitted on (the bore must span it).
+        `guessed`: `sig` is the file under a guessed transform (other units, a
+        stretch undone): slab-only fingerprints do not count there - a stack of
+        plane spacings lines up by chance under a wild scale (Prusa i3 belt
+        parts read in inches matched a flare-pistol mockup's barcode)."""
         out: list[Evidence] = []
-        tight = detect(sig, self.fps, loose=False)
+        fps = [f for f in self.fps if not getattr(f, "tight_only", False)] if guessed else self.fps
+        tight = detect(sig, fps, loose=False)
         seen = {h["reference"] for h in tight}
         loose = [h for h in detect(sig, self.fps, loose=True) if h["reference"] not in seen]
         loose = [h for h in loose if self._holds_unresized(
@@ -181,7 +186,7 @@ def _unstretched(lib: "Library", sig: dict, mesh: trimesh.Trimesh, body: str) ->
         s2 = signature_of_mesh(m, f"{sig['path']}#unstretched", sig.get("scale", 1.0), describe=False)
         tag = "per-axis scale x" + "/".join(f"{x:.3f}" for x in st) + " undone"
         b = tag if body == "whole" else f"{body}, {tag}"
-        ev = lib.evidence_for(s2, b, bores=False) or scaled_evidence(lib, s2, b)
+        ev = lib.evidence_for(s2, b, bores=False, guessed=True) or scaled_evidence(lib, s2, b)
         if ev:
             return ev
     return []
@@ -316,7 +321,8 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
     if not ev and scale is None:
         for alt in alternative_scales(raw, s):
             m = prepare_mesh(raw.copy(), scale=alt)
-            ev = lib.evidence_for(signature_of_mesh(m, f"{name}@x{alt:g}", alt, describe=False), f"units x{alt:g}", bores=False)
+            ev = lib.evidence_for(signature_of_mesh(m, f"{name}@x{alt:g}", alt, describe=False), f"units x{alt:g}", bores=False,
+                                  guessed=True)
             if ev:
                 break
     if not ev:

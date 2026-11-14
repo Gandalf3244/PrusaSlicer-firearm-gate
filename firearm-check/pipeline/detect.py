@@ -51,6 +51,7 @@ def fingerprints_from(results: list[dict]) -> list[Fingerprint]:
             fp.shared_with = v.get("shared_with", [])     # ... or the same kind of part in the same family
             fp.variant, fp.n_variants = i, len(variants)
             fp.min_fired = 2 if r["status"] == "corroborate" else 1   # weak parts need two independent hits
+            fp.tight_only = bool(v.get("tight_only"))       # slab-only (drill-proof) fingerprints: design level only
             fps.append(fp)
     return fps
 
@@ -119,6 +120,8 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False,
         return False
 
     for fp in fps:
+        if (loose or scale_range is not None) and getattr(fp, "tight_only", False):
+            continue
         if not all(possible(fh) for fh in fp.holes):
             continue
         ms = match(fp, sig, band, name, scale_range=scale_range)

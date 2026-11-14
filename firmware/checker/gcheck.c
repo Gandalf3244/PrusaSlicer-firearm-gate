@@ -1286,7 +1286,7 @@ static void scaled_pass(gc_state_t *s)
         for (; k < FP_N_PRINTS && FP_PRINTS[k].part == p; k++) {
             const fp_print_t *f = &FP_PRINTS[k];
             int as[4];
-            if ((f->flags & GC_SKIP_ALWAYS) || n_iv >= 3) continue;
+            if ((f->flags & (GC_SKIP_ALWAYS | GC_FLAG_SLABS)) || n_iv >= 3) continue;   /* slab-only: exact size only */
             if (assign_scaled(s, f, &b, 0, as, GC_SCALE_LO, GC_SCALE_HI, iv[n_iv])) {
                 if (f->n >= GC_SCALED_ALONE) alone = 1;
                 n_iv++;
