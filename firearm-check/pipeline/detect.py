@@ -132,6 +132,7 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False,
             "min_fired": getattr(fp, "min_fired", 1), "tier": "corroborate" if getattr(fp, "min_fired", 1) > 1 else "strong",
             "worst_residual_frac": 9.9, "residuals": {}, "band": name, "contained_in": set(), "shared_with": set()})
         h["fired"] += 1
+        h.setdefault("variants", []).append(getattr(fp, "variant", 0))
         h["contained_in"] |= set(getattr(fp, "contained_in", []))
         h["shared_with"] |= set(getattr(fp, "shared_with", []))
         h.setdefault("matched_d", []).append([elements(sig, 0.9)[k]["d"] for k in best.assignment])

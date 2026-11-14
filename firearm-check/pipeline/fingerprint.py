@@ -188,6 +188,31 @@ def same_kind_scaled(e1: dict, e2: dict, band: Band, iv: tuple[float, float]) ->
     return iv
 
 
+M3_HOLES = (2.3, 3.0)       # mm: self-tapping / heat-set pilot holes, on every printer part
+PARALLEL_DEG = 2.0          # relation angle below which two axes count as parallel
+CONCENTRIC_MM = 1.0         # axes this close: the elements are steps of one round feature
+
+
+def weak_shape(holes: list[dict], relations: dict) -> int:
+    """Bit flags of the constellation shapes that carry little identity
+    (found on G-code and the printer checker, scripts/mcu_table.py):
+    1 = made only of M3-size holes, 2 = two elements share an axis (a stepped
+    tube: the pair's relation is just two diameters), 4 = a pair of equal
+    holes / bosses. `relations`: {"i-j": (angle, sep)} or {(i, j): ...}."""
+    def rel(i, j):
+        return relations.get(f"{i}-{j}", relations.get((i, j)))
+    n = len(holes)
+    lo, hi = M3_HOLES
+    flags = int(all(h.get("kind", "hole") == "hole" and lo <= h["d"] <= hi for h in holes))
+    lines = [h.get("kind", "hole") in ("hole", "boss") for h in holes]
+    if any(lines[i] and lines[j] and rel(i, j)[0] < PARALLEL_DEG and rel(i, j)[1] < CONCENTRIC_MM
+           for i in range(n) for j in range(i + 1, n)):
+        flags |= 2
+    if n == 2 and abs(holes[0]["d"] - holes[1]["d"]) < 0.05 and holes[0].get("kind", "hole") == holes[1].get("kind", "hole"):
+        flags |= 4
+    return flags
+
+
 def dedupe_coaxial(holes: list[dict], band: Band = TIGHT) -> list[dict]:
     """Collapse coaxial elements of equal kind/diameter (the same pin bore
     appearing in two side walls) into one element, keeping the longest."""
