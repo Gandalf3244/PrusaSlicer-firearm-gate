@@ -41,8 +41,9 @@ import trimesh
 
 from .calibers import bore_evidence
 from .detect import detect, load_fingerprints, signature_of_mesh
-from .families import classify_family, load_family_patterns
+from .families import family_matches, load_family_patterns
 from .pool import trim_after
+from .resize import resized_scales, resized_signature
 from .roles import is_grip, role_of
 from .units import UNIT_SCALE, infer_scale, prepare_mesh
 
@@ -111,6 +112,16 @@ class Library:
         self.patterns = load_family_patterns()
         self.n_parts = len({fp.source for fp in self.fps})
 
+    @staticmethod
+    def _holds_unresized(sig: dict, matched: list[list[float]], ask) -> bool:
+        """Weak (lineage / platform) evidence stands unless the part looks like a
+        metric part resized by some s (pipeline.resize: the features one
+        fingerprint matched, and the rest of the part, round at s) and the
+        evidence is gone at its original size. `matched`: the matched target
+        diameters per fired fingerprint; `ask(sig)` asks for the evidence again."""
+        scales = sorted({round(s, 6) for m in matched for s in resized_scales(sig, m)})
+        return not scales or any(bool(ask(resized_signature(sig, s))) for s in scales)
+
     def evidence_for(self, sig: dict, body: str, bores: bool = True, mesh=None) -> list[Evidence]:
         """`bores=False` at a guessed unit scale: a bore is a single dimension,
         and a PCB DIN clip's Ø1.9 x 9.6 mm hole read at x10 is a "12-gauge barrel".
@@ -119,6 +130,8 @@ class Library:
         tight = detect(sig, self.fps, loose=False)
         seen = {h["reference"] for h in tight}
         loose = [h for h in detect(sig, self.fps, loose=True) if h["reference"] not in seen]
+        loose = [h for h in loose if self._holds_unresized(
+            sig, h["matched_d"], lambda s2, ref=h["reference"]: detect(s2, [f for f in self.fps if f.source == ref], loose=True))]
         for level, hits in (("design", tight), ("lineage", loose)):
             for h in hits:
                 ref = h["reference"]; parts = ref.split("/")
@@ -130,8 +143,10 @@ class Library:
                     continue
                 out.append(Evidence(level, f"{role}: {parts[-1]} ({model}), {h['fired']}/{h['n_fingerprints']} fingerprints",
                                     ref, model, role, h["confidence"], body))
-        for fam, n in classify_family(sig, self.patterns).items():
-            out.append(Evidence("platform", f"{fam} platform pattern x{n}", "", "", "", 1.0, body))
+        for fam, ms in family_matches(sig, self.patterns).items():
+            pats = [p for p in self.patterns if p.family == fam]
+            if self._holds_unresized(sig, ms, lambda s2, pats=pats: family_matches(s2, pats)):
+                out.append(Evidence("platform", f"{fam} platform pattern x{len(ms)}", "", "", "", 1.0, body))
         for b in bore_evidence(sig, mesh) if bores else []:
             out.append(Evidence("bore", f"barrel bore {b['caliber']} (Ø{b['d']:.2f} x {b['L']:.0f} mm)", "", "", "barrel", 1.0, body))
         return out

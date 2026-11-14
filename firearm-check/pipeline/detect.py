@@ -134,6 +134,7 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False,
         h["fired"] += 1
         h["contained_in"] |= set(getattr(fp, "contained_in", []))
         h["shared_with"] |= set(getattr(fp, "shared_with", []))
+        h.setdefault("matched_d", []).append([elements(sig, 0.9)[k]["d"] for k in best.assignment])
         if (len(fp.holes), -best.worst) > (h["n_elements"], -h["worst_residual_frac"]):
             h["n_elements"], h["worst_residual_frac"], h["residuals"] = len(fp.holes), round(best.worst, 3), best.residuals
     out = []

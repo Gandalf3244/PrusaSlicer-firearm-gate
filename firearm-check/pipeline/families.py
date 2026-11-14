@@ -13,7 +13,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from .fingerprint import Fingerprint, match
+from .fingerprint import Fingerprint, elements, match
 from .tolerances import LOOSE
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,8 +35,17 @@ def load_family_patterns(path: Path = DATA / "family_patterns.json") -> list[Fin
 
 def classify_family(sig: dict, patterns: list[Fingerprint]) -> dict[str, int]:
     """family -> number of its patterns present (LOOSE)."""
-    hits: Counter = Counter()
+    return {fam: len(ms) for fam, ms in family_matches(sig, patterns).items()}
+
+
+def family_matches(sig: dict, patterns: list[Fingerprint]) -> dict[str, list[list[float]]]:
+    """family -> per pattern present, the diameters of the target elements it
+    matched (most patterns first)."""
+    hits: dict[str, list[list[float]]] = {}
+    els = None
     for fp in patterns:
-        if match(fp, sig, LOOSE, "LOOSE"):
-            hits[fp.family] += 1
-    return dict(hits.most_common())
+        ms = match(fp, sig, LOOSE, "LOOSE")
+        if ms:
+            els = els if els is not None else elements(sig, 0.9)
+            hits.setdefault(fp.family, []).append([els[k]["d"] for k in ms[0].assignment])
+    return dict(sorted(hits.items(), key=lambda kv: -len(kv[1])))

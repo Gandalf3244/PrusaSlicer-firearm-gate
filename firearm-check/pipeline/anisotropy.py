@@ -169,6 +169,8 @@ def _solve(patches, V0: np.ndarray, extra: list[np.ndarray]) -> tuple[np.ndarray
             continue
         l = l + dl
         l -= l.mean()
+        if not np.all(np.isfinite(l)) or np.ptp(l) > 2 * MAX_STRETCH:
+            return None                        # diverging: no plausible stretch
         if np.abs(dl).max() < 1e-6:
             break
     return l, rank, int(keep.sum())
