@@ -95,11 +95,11 @@ Files blocked of 551 per config (Cura / Orca / PrusaSlicer 0.4 / PrusaSlicer 0.6
 in every row. "Relabelled": the evasions `mcu_eval.py --relabel` - every label rewritten to support,
 or every outer wall to an inner one.
 
-| G-code as handed over | before (full, 55.7 KB) | full (89 KB) | compact (51 KB) | tiny (28 KB) |
-|---|---|---|---|---|
-| labelled | 157 / 73 / 179 / 191 = 600 | 162 / 69 / 177 / 200 = **608** | 575 | 528 (was 520) |
-| comments stripped | 88 / 36 / 113 / 78 = 315 | 121 / 39 / 143 / 160 = **463** | 446 (was 277) | 416 (was 275) |
-| everything relabelled support | **0** | 117 / 39 / 142 / 151 = **449** | 438 | 333 |
+| G-code as handed over | before (full, 55.7 KB) | full (89 KB) | compact (51 KB) | small (34 KB) | tiny (28 KB) |
+|---|---|---|---|---|---|
+| labelled | 157 / 73 / 179 / 191 = 600 | 162 / 69 / 177 / 200 = **608** | 575 | 154 / 68 / 168 / 170 = 560 | 528 (was 520) |
+| comments stripped | 88 / 36 / 113 / 78 = 315 | 121 / 39 / 143 / 160 = **463** | 446 (was 277) | 116 / 38 / 142 / 135 = 431 | 416 (was 275) |
+| everything relabelled support | **0** | 117 / 39 / 142 / 151 = **449** | 438 | 98 / 44 / 116 / 84 = 342 | 333 |
 | outer walls relabelled inner | 439 | 565 | | |
 | every 2nd layer, labelled / stripped | | 581 / 449 | | |
 
@@ -150,8 +150,9 @@ at run time (`gc_caps_t`). Since 2026-11-14 (host sizes; the MCU's are a little 
 89.1 KB, compact 51.3 KB, tiny 28.5 KB - see the table above. Before: full 55.5 KB, compact 35.2 KB,
 tiny 27.3 KB on the MCU; with comments / stripped, all 4 configs: full 543 / 288 files, compact
 529 / 277, tiny 520 / 275 (that library); 0 negatives and 0 wrong-family labels for all three.
-The firmware takes the largest that fits: on the Mini404 emulator's heap (~54 KB free at the
-preview, no network) that is compact. Stack high-water 1.0 KB (large scratch arrays
+The firmware takes the largest that leaves 20 KB of heap free (the preview decodes the thumbnail
+meanwhile): on the emulated MK4 (~61 KB free when the check starts, no network) that is *small*
+(34 KB; the old MK4 size was compact at 35 KB: 529 / 277 / 0 on the rows above). Stack high-water 1.0 KB (large scratch arrays
 live in the state block: the printer runs the check on a 4 KB thread stack), no heap. Flash 127 KB
 (code + fingerprint table + libm). `-DGC_TILT=0`: no tilted cylinders. Not included in the time:
 reading the file from USB and decompressing `.bgcode` (the firmware's reader does both already

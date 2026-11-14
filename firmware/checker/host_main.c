@@ -1,5 +1,5 @@
 /* Host driver: G-code text on stdin -> one JSON verdict line on stdout.
- *     gcheck_host [stride] [full|compact|tiny]        gcheck_host --size
+ *     gcheck_host [stride] [full|compact|small|tiny]        gcheck_host --size
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,13 +10,14 @@
 int main(int argc, char **argv)
 {
     if (argc > 1 && !strcmp(argv[1], "--size")) {
-        printf("{\"state_bytes\": %u, \"compact\": %u, \"tiny\": %u}\n", (unsigned)gc_state_bytes(&gc_caps_full),
-               (unsigned)gc_state_bytes(&gc_caps_compact), (unsigned)gc_state_bytes(&gc_caps_tiny));
+        printf("{\"state_bytes\": %u, \"compact\": %u, \"small\": %u, \"tiny\": %u}\n", (unsigned)gc_state_bytes(&gc_caps_full),
+               (unsigned)gc_state_bytes(&gc_caps_compact), (unsigned)gc_state_bytes(&gc_caps_small), (unsigned)gc_state_bytes(&gc_caps_tiny));
         return 0;
     }
     int stride = argc > 1 ? atoi(argv[1]) : 1;
     const gc_caps_t *caps = &gc_caps_full;
     if (argc > 2 && !strcmp(argv[2], "compact")) caps = &gc_caps_compact;
+    if (argc > 2 && !strcmp(argv[2], "small")) caps = &gc_caps_small;
     if (argc > 2 && !strcmp(argv[2], "tiny")) caps = &gc_caps_tiny;
     uint32_t bytes = gc_state_bytes(caps);
     void *mem = malloc(bytes);

@@ -147,6 +147,7 @@ typedef struct {
 typedef struct { uint16_t path, circ, ell, run, track, etrack, ptrack, elem, map_n, foot_n, smap; } gc_caps_t;   /* smap: 1 = second map with labelled support */
 extern const gc_caps_t gc_caps_full;      /* the GC_* defaults above (~89 KB) */
 extern const gc_caps_t gc_caps_compact;   /* ~51 KB */
+extern const gc_caps_t gc_caps_small;     /* ~34 KB: no second map */
 extern const gc_caps_t gc_caps_tiny;      /* ~28 KB: no second map (walls labelled as support are found as holes only) */
 
 typedef struct {

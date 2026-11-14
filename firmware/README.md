@@ -30,27 +30,32 @@ refuses it if it contains a known printed-gun part - whichever slicer made the G
    that extrude while moving X / Y are refused. Homing, jogging, temperatures and extruder-only
    moves still work.
 
-The checker's working memory (55.5 KB) is borrowed from the heap only while it runs; when the
-heap is short it uses a 35 KB or 27 KB configuration (2-4 % fewer parts found). Flash use goes
-from 1.21 to 1.33 MB of 1.9 MB.
+The checker's working memory is borrowed from the heap only while it runs: the largest of four
+configurations (89, 51, 34 or 28 KB) that still leaves 20 KB of heap for the rest of the firmware -
+34 KB on an MK4 without network (emulator). G-code comments and feature labels cannot hide a part:
+with the comments removed, or every extrusion labelled "support", the check still runs on the
+geometry. Flash use goes from 1.21 to 1.37 MB of 1.9 MB. Built 2026-11-14.
 
 ## How good it is
 
 The checker sees holes, bosses, walls and slots in the layers of the G-code - vertical, lying
 flat and tilted - and matches them against fingerprints of the same reference library as the
-slicer gate (498 of its parts have usable fingerprints). On G-code sliced from the library and from
-1721 non-gun files with four slicer setups:
+slicer gate (514 of its parts have usable fingerprints). On G-code sliced from the library and from
+1721 non-gun files with four slicer setups, at the 34 KB size an MK4 uses (2026-11-14):
 
-| slicer setup | gun files blocked | with comments stripped |
-|---|---|---|
-| Cura, Ender-3, flat | 142 / 551 | 84 / 551 |
-| PrusaSlicer 0.4 mm, flat | 158 / 551 | 104 / 551 |
-| PrusaSlicer 0.6 mm, as modelled | 181 / 551 | 69 / 551 |
-| OrcaSlicer X1C, random rotation | 62 / 551 | 34 / 551 |
-| non-gun files blocked | **0 / 1721** | **0 / 1721** |
+| slicer setup | gun files blocked | comments stripped | every label rewritten to "support" |
+|---|---|---|---|
+| Cura, Ender-3, flat | 154 / 551 | 116 / 551 | 98 / 551 |
+| PrusaSlicer 0.4 mm, flat | 168 / 551 | 142 / 551 | 116 / 551 |
+| PrusaSlicer 0.6 mm, as modelled | 170 / 551 | 135 / 551 | 84 / 551 |
+| OrcaSlicer X1C, random rotation | 68 / 551 | 38 / 551 | 44 / 551 |
+| non-gun files blocked | **0 / 1721** | **0 / 1721** | **0 / 1721** |
 
-No gun part got another design's label. It catches about a quarter to a third of the gun files
-(the full slicer gate on meshes catches all 552): what it misses are parts whose holes are too
+(The 2026-09-26 build: 142 / 158 / 181 / 62 with comments, 84 / 104 / 69 / 34 stripped, and 0 with
+every label rewritten - labelled support used to be skipped.)
+
+It catches about a quarter to a third of the gun files
+(the full slicer gate on meshes catches all 560): what it misses are parts whose holes are too
 short or too steep to show up in the layers, and features the fingerprints need but the layers
 lose. It is a second line behind the slicer gate, not a replacement.
 
@@ -58,11 +63,11 @@ lose. It is a second line behind the slicer gate, not a replacement.
 
 - **Emulator of the whole firmware** (Mini404, MK4S): a gun part and a 10 MB AR-15 lower are
   blocked with the message; a non-gun part (cable clip) prints. See `emulator/`.
-- **Emulator of the checker alone** (Renode, STM32F4): 160 runs, 0 faults, verdicts identical to
-  the PC build; 0.29-0.44 s per MB of G-code at 180 MHz (a typical 4 MB file: 1.5 s). See `checker/`.
+- **Emulator of the checker alone** (Renode, STM32F4): 64 runs, 0 faults, verdicts identical to
+  the PC build; 0.5-0.7 s per MB of G-code at 180 MHz (a typical 4 MB file: 2-3 s). See `checker/`.
 - **Not tested on a real printer.** In particular the free heap with Wi-Fi / Prusa Connect
-  running is unknown: if not even 27 KB are free there, every print is blocked with
-  "Not enough free memory".
+  running is unknown: if less than 48 KB is free there (28 KB + the 20 KB reserve), every print
+  is blocked with "Not enough free memory".
 
 ## Flashing
 

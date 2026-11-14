@@ -1213,6 +1213,7 @@ static void extrude(gc_state_t *s, float x0, float y0, float x1, float y1, float
 const gc_caps_t gc_caps_full = {GC_PATH_MAX, GC_MAX_CIRC, GC_MAX_ELL, GC_MAX_RUN, GC_MAX_TRACK, GC_MAX_ETRACK,
                                 GC_MAX_PTRACK, GC_MAX_ELEM, GC_MAP_N, GC_FOOT_N, 1};
 const gc_caps_t gc_caps_compact = {256, 96, 48, 256, 48, 16, 40, 128, 256, 64, 1};
+const gc_caps_t gc_caps_small = {192, 80, 40, 192, 40, 14, 32, 112, 224, 32, 0};
 const gc_caps_t gc_caps_tiny = {160, 64, 32, 128, 32, 12, 32, 96, 208, 32, 0};
 
 #define ALIGN8(x) (((x) + 7u) & ~7u)
