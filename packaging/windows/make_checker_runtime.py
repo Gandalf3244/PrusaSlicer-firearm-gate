@@ -1,7 +1,7 @@
 """Assemble the self-contained Windows checker that the installer ships at
     <PrusaSlicer>\\resources\\firearm-check\\
         python\\   official embeddable CPython + numpy/scipy/trimesh/networkx (Windows wheels)
-        app\\      pipeline/, data/fingerprints.json, data/family_patterns.json, scripts/sldprt2stl.py
+        app\\      pipeline/, data/fingerprints.json, data/family_patterns.json, data/library_bores.json, scripts/sldprt2stl.py
 
     python make_checker_runtime.py <project root> <output dir> [--python 3.13]
 
@@ -79,7 +79,7 @@ def main():
 
     shutil.copytree(a.root / "pipeline", app / "pipeline", ignore=shutil.ignore_patterns("__pycache__"))
     (app / "data").mkdir()
-    for f in ("fingerprints.json", "family_patterns.json"):
+    for f in ("fingerprints.json", "family_patterns.json", "library_bores.json"):
         shutil.copy(a.root / "data" / f, app / "data" / f)
     (app / "scripts").mkdir()
     shutil.copy(a.root / "scripts" / "sldprt2stl.py", app / "scripts" / "sldprt2stl.py")

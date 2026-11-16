@@ -263,3 +263,45 @@ def bore_evidence(sig: dict, mesh=None) -> list[dict]:
         if span >= BORE_MIN_SPAN and resized_refused(sig, h) is None:
             out.append({**b, "span": round(span, 3)})
     return out
+
+
+# A bore alone is a tube: check.py blocks it only with a second signal. One such
+# signal is the bore of a known barrel - a library part of role "barrel" whose
+# bore has the same diameter (TIGHT) and length: a copy or a redrawing of that
+# barrel (the GrabCAD 1911 barrel has the DEFCAD one's 11.33 x 101 mm), not a
+# tube that happens to be a bullet diameter. data/library_bores.json, written by
+# write_known_bores() (python -m pipeline.calibers; scripts/reliability.py).
+KNOWN_BORE_D = 0.02      # mm, TIGHT diameter band
+KNOWN_BORE_L = 0.5       # mm, LOOSE length band
+
+
+def load_known_bores(path=None) -> list[dict]:
+    from pathlib import Path
+    import json
+    path = path or Path(__file__).resolve().parents[1] / "data" / "library_bores.json"
+    return json.load(open(path)) if Path(path).exists() else []
+
+
+def known_bore(b: dict, known: list[dict]) -> str | None:
+    """The library barrel whose bore `b` (d, L) reproduces, or None."""
+    for k in known:
+        if abs(b["d"] - k["d"]) <= KNOWN_BORE_D and abs(b["L"] - k["L"]) <= KNOWN_BORE_L:
+            return k["part"]
+    return None
+
+
+def write_known_bores(rows: list[dict], path=None) -> int:
+    """Bores (bore_candidates) of the library parts of role barrel."""
+    from pathlib import Path
+    import json
+    from .roles import role_of
+    path = path or Path(__file__).resolve().parents[1] / "data" / "library_bores.json"
+    out = sorted({(round(b["d"], 3), round(b["L"], 2), r["path"]) for r in rows
+                  if role_of(r["part"], r["model"]) == "barrel" for b in bore_candidates(r)})
+    json.dump([{"d": d, "L": L, "part": p} for d, L, p in out], open(path, "w"), indent=0)
+    return len(out)
+
+
+if __name__ == "__main__":
+    from .similarity import load
+    print(f"wrote data/library_bores.json: {write_known_bores(load())} library barrel bores")

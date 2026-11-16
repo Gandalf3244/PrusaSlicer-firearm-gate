@@ -19,6 +19,7 @@ import trimesh
 import numpy as np
 
 from .anisotropy import axis_scales
+from .chance import is_weak
 from .fingerprint import PLUG_OVERSIZE, Fingerprint, elements, match
 from .signature import global_features, primitive_features
 from .primitives import segment
@@ -52,6 +53,8 @@ def fingerprints_from(results: list[dict]) -> list[Fingerprint]:
             fp.variant, fp.n_variants = i, len(variants)
             fp.min_fired = 2 if r["status"] == "corroborate" else 1   # weak parts need two independent hits
             fp.tight_only = bool(v.get("tight_only"))       # slab-only (drill-proof) fingerprints: design level only
+            fp.cands_ref = v.get("cands_ref")               # candidate tuples on its own part (pipeline.chance)
+            fp.screened = bool(v.get("screened"))           # fired on a TUNE non-gun object: corroborates only
             fps.append(fp)
     return fps
 
@@ -79,7 +82,7 @@ SCALED_ALONE = 3   # elements a single fingerprint needs to identify a part at a
 
 
 def detect(sig: dict, fps: list[Fingerprint], loose: bool = False,
-           scale_range: tuple[float, float] | None = None) -> list[dict]:
+           scale_range: tuple[float, float] | None = None, report_weak: bool = False) -> list[dict]:
     """Labels for one signature. Every fingerprint is matched; hits are
     grouped per reference part and reported with `fired` = how many of that
     part's independent fingerprints were found (k of n): a fused input that
@@ -89,7 +92,14 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False,
     that range (a part resized in the slicer). A free scale makes a
     two-element constellation much easier to hit by chance (one ratio and an
     angle are left), so a part then needs a fingerprint of >= SCALED_ALONE
-    elements, or two of its fingerprints at one common scale."""
+    elements, or two of its fingerprints at one common scale.
+
+    A match that may be chance (pipeline.chance: too many candidate elements
+    in the target, or a screened fingerprint) only corroborates: the part is
+    reported when its strong matches meet `min_fired`, or when at least two
+    of its fingerprints fired in all. `report_weak`: also return the parts
+    that only weak matches found (marked "weak_only"), as corroboration for
+    other evidence (check: a bore)."""
     band, name = (LOOSE, "LOOSE") if loose else (TIGHT, "TIGHT")
     lo_s, hi_s = scale_range or (1.0, 1.0)
     per_part: dict[str, dict] = {}
@@ -135,6 +145,7 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False,
             "min_fired": getattr(fp, "min_fired", 1), "tier": "corroborate" if getattr(fp, "min_fired", 1) > 1 else "strong",
             "worst_residual_frac": 9.9, "residuals": {}, "band": name, "contained_in": set(), "shared_with": set()})
         h["fired"] += 1
+        h["strong"] = h.get("strong", 0) + (scale_range is not None or not is_weak(fp, sig, name))
         h.setdefault("variants", []).append(getattr(fp, "variant", 0))
         h["contained_in"] |= set(getattr(fp, "contained_in", []))
         h["shared_with"] |= set(getattr(fp, "shared_with", []))
@@ -148,8 +159,10 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False,
             alone = any(n >= SCALED_ALONE for n, _ in scaled_hits[h["reference"]])
             if h["fired"] < max(h["min_fired"], 1 if alone else 2):
                 continue
-        if h["fired"] < h["min_fired"]:
-            continue
+        if h["strong"] < h["min_fired"] and h["fired"] < max(h["min_fired"], 2):
+            if not report_weak:
+                continue
+            h["weak_only"] = True
         h["contained_in"] = sorted(h["contained_in"])
         h["shared_with"] = sorted(h["shared_with"])
         h["confidence"] = round(h["fired"] / h["n_fingerprints"], 2)

@@ -2,8 +2,8 @@
 
     python -m pipeline.check model.stl [more files or folders] [--json] [--units mm|in|cm]
 
-Exit code: 0 = every input may be printed, 2 = at least one must not, 1 = an
-input could not be read. Meant to be called by a slicer hook or a print
+Exit code: 0 = every input may be printed, 3 = may be printed with a warning
+(a lone bore), 2 = at least one must not, 1 = an input could not be read. Meant to be called by a slicer hook or a print
 server; `check_file()` / `check_mesh()` are the same thing as a function.
 
 Formats: anything trimesh reads (STL, 3MF, OBJ, PLY, OFF, GLB/GLTF) and
@@ -17,10 +17,15 @@ Decision (every rule measured on the negative set, 0/432 firings each):
     lineage   the same at LOOSE: a derivative / re-export of a known design
     platform  family patterns present (e.g. the AR-15 fire-control pocket)
     bore      a long hole at a printed-gun bullet diameter that runs the whole
-              length of the part (a barrel; calibers.bore_evidence)
+              length of the part (a barrel; calibers.bore_evidence) - blocks
+              only with a second signal (other evidence, or a weak fingerprint
+              match that would not block alone); a bore alone is WARN: a tube
+              is a tube (trumpet lead pipes, umbrella shafts and 3/8" CAD holes
+              have one, data/analysis_chance.txt)
     scaled    a shipped part identified at a uniform scale within SCALE_RANGE
               (resized in the slicer / shrink compensation; detect(scale_range=...))
-Any of them -> BLOCK. Otherwise ALLOW. When nothing is found, the constellations
+Any of them -> BLOCK; only a lone bore -> WARN (may be printed, the user is told).
+Otherwise ALLOW. When nothing is found, the constellations
 are tried at a free scale, then with a per-axis stretch undone (read off the
 ellipticity of the part's round features: anisotropy.axis_scales), then once
 more with plugged holes undone
@@ -39,7 +44,7 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
-from .calibers import bore_evidence
+from .calibers import bore_evidence, known_bore, load_known_bores
 from .detect import detect, load_fingerprints, signature_of_mesh
 from .families import family_matches, load_family_patterns, platform_pairs
 from .fingerprint import elements
@@ -85,12 +90,13 @@ class Evidence:
     role: str = ""
     confidence: float = 1.0     # fingerprints fired / fingerprints of the part
     body: str = "whole"
+    blocking: bool = True       # False: a bore without a second signal (WARN)
 
 
 @dataclass
 class Verdict:
     path: str
-    verdict: str                # BLOCK | ALLOW | ERROR
+    verdict: str                # BLOCK | WARN | ALLOW | ERROR
     level: str | None = None    # strongest evidence level
     evidence: list[Evidence] = field(default_factory=list)
     bodies: int = 1
@@ -111,6 +117,7 @@ class Library:
     def __init__(self):
         self.fps = load_fingerprints()
         self.patterns = load_family_patterns()
+        self.known_bores = load_known_bores()  # library barrels' bores: a bore's second signal
         self.n_parts = len({fp.source for fp in self.fps})
 
     @staticmethod
@@ -157,12 +164,38 @@ class Library:
         # is not evidence at a wild scale)
         for name in [] if guessed else sorted(set(platform_pairs(elements(sig, 0.9)))):
             out.append(Evidence("platform", f"platform pin pair: {name}", "", "", "", 1.0, body))
-        for b in bore_evidence(sig, mesh) if bores else []:
-            out.append(Evidence("bore", f"barrel bore {b['caliber']} (Ø{b['d']:.2f} x {b['L']:.0f} mm)", "", "", "barrel", 1.0, body))
+        found = bore_evidence(sig, mesh) if bores else []
+        if found:
+            # a second signal: other evidence, the bore of a known barrel, or a
+            # fingerprint match too weak to block alone
+            weak = None
+            for b in found:
+                what = f"barrel bore {b['caliber']} (Ø{b['d']:.2f} x {b['L']:.0f} mm)"
+                if not out and (ref := known_bore(b, self.known_bores)):
+                    second = f"the bore of {ref.split('/')[-1]}"
+                elif not out:
+                    weak = self._weak_match(sig, fps) if weak is None else weak
+                    second = weak
+                else:
+                    second = ""
+                out.append(Evidence("bore", what + (f" + {second}" if second else ""), "", "", "barrel", 1.0, body,
+                                    blocking=bool(out) or bool(second)))
         return out
+
+    def _weak_match(self, sig: dict, fps) -> str:
+        """The first library part found only by weak matches (detect report_weak), or ""."""
+        for loose, lib in ((False, fps), (True, self.fps)):
+            for h in detect(sig, lib, loose=loose, report_weak=True):
+                if h.get("weak_only"):
+                    return f"weak match {h['reference'].split('/')[-1]} ({h['fired']}/{h['n_fingerprints']})"
+        return ""
 
 
 _LEVEL_RANK = {"design": 0, "lineage": 1, "platform": 2, "bore": 3, "scaled": 4}
+
+
+def _blocks(ev: list[Evidence]) -> bool:
+    return any(e.blocking for e in ev)
 
 
 def scaled_evidence(lib: "Library", sig: dict, body: str) -> list[Evidence]:
@@ -315,48 +348,55 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
     whole = prepare_mesh(raw.copy(), scale=s)
     sig = signature_of_mesh(whole, name, s, describe=False)
     ev = lib.evidence_for(sig, "whole", mesh=whole)
-    if not ev:
+    if not _blocks(ev):
         # the same part twice at one place (two identical parts of one object):
         # every face doubled, which the fitter cannot read - check it once
         uniq = raw.unique_faces()
         if int(np.count_nonzero(uniq)) < len(raw.faces):
             dedup = raw.copy(); dedup.update_faces(uniq)
             m = prepare_mesh(dedup, scale=s)
-            ev = lib.evidence_for(signature_of_mesh(m, f"{name}#dedup", s, describe=False), "duplicates removed", mesh=m)
-    if not ev and scale is None:
+            ev += lib.evidence_for(signature_of_mesh(m, f"{name}#dedup", s, describe=False), "duplicates removed", mesh=m)
+    if not _blocks(ev) and scale is None:
         for alt in alternative_scales(raw, s):
             m = prepare_mesh(raw.copy(), scale=alt)
-            ev = lib.evidence_for(signature_of_mesh(m, f"{name}@x{alt:g}", alt, describe=False), f"units x{alt:g}", bores=False,
-                                  guessed=True)
-            if ev:
+            ev += lib.evidence_for(signature_of_mesh(m, f"{name}@x{alt:g}", alt, describe=False), f"units x{alt:g}", bores=False,
+                                   guessed=True)
+            if _blocks(ev):
                 break
-    if not ev:
-        ev = scaled_evidence(lib, sig, "whole")
-    if not ev:
-        ev = _unstretched(lib, sig, whole, "whole")
-    if not ev:
-        ev = _unplugged(lib, sig, "whole", whole)
+    if not _blocks(ev):
+        ev += scaled_evidence(lib, sig, "whole")
+    if not _blocks(ev):
+        ev += _unstretched(lib, sig, whole, "whole")
+    if not _blocks(ev):
+        ev += _unplugged(lib, sig, "whole", whole)
     bodies = [b for b in whole.split(only_watertight=False)
               if len(b.faces) >= MIN_BODY_FACES and not is_degenerate(b)]
     # a plate of several parts: each body on its own, with its own unit guess
     # (a single part split into shells by a broken mesh is covered by "whole")
-    if len(bodies) > 1 and (thorough or not ev):
+    if len(bodies) > 1 and (thorough or not _blocks(ev)):
         for i, b in enumerate(bodies):
             raw_b = b.copy(); raw_b.apply_scale(1.0 / s)
             sb = infer_scale(raw_b) if scale is None else scale
             mb = prepare_mesh(raw_b, scale=sb)
             sb_sig = signature_of_mesh(mb, f"{name}#body{i}", sb, describe=False)
             ev_b = lib.evidence_for(sb_sig, f"body {i}", mesh=mb)
-            ev += (ev_b or scaled_evidence(lib, sb_sig, f"body {i}") or _unstretched(lib, sb_sig, mb, f"body {i}")
-                   or _unplugged(lib, sb_sig, f"body {i}", mb))
+            for more in (scaled_evidence, lambda l, g, b: _unstretched(l, g, mb, b), lambda l, g, b: _unplugged(l, g, b, mb)):
+                if _blocks(ev_b):
+                    break
+                ev_b += more(lib, sb_sig, f"body {i}")
+            ev += ev_b
     # one line per distinct finding
     uniq: dict[tuple, Evidence] = {}
     for e in ev:
         k = (e.level, e.reference or e.what)
         if k not in uniq or e.confidence > uniq[k].confidence:
             uniq[k] = e
-    ev = sorted(uniq.values(), key=lambda e: (_LEVEL_RANK[e.level], -e.confidence))
-    return Verdict(name, "BLOCK" if ev else "ALLOW", ev[0].level if ev else None, ev,
+    ev = sorted(uniq.values(), key=lambda e: (not e.blocking, _LEVEL_RANK[e.level], -e.confidence))
+    if _blocks(ev):                 # a bore next to other evidence on another pass or body has its second signal
+        for e in ev:
+            e.blocking = True
+    verdict = "BLOCK" if _blocks(ev) else "WARN" if ev else "ALLOW"
+    return Verdict(name, verdict, ev[0].level if ev else None, ev,
                    max(1, len(bodies)), sig["counts"]["holes"], sig.get("noise", 0.0), round(time.time() - t0, 2))
 
 
@@ -405,7 +445,7 @@ def _inputs(paths: list[str]) -> list[Path]:
 def format_verdict(v: Verdict, lib: Library) -> str:
     if v.verdict == "ERROR":
         return f"{v.path}\n  ERROR  could not read: {v.error}"
-    head = "DO NOT PRINT" if v.verdict == "BLOCK" else "OK TO PRINT"
+    head = {"BLOCK": "DO NOT PRINT", "WARN": "WARNING (may print)"}.get(v.verdict, "OK TO PRINT")
     lines = [f"{v.path}\n  {head}  ({v.level or 'no firearm-part evidence'}; {v.holes} holes, "
              f"{v.bodies} bod{'y' if v.bodies == 1 else 'ies'}, noise {v.noise_mm:.3f} mm, "
              f"{lib.n_parts} reference parts, {v.seconds:.1f} s)"]
@@ -482,8 +522,8 @@ def main():
     worst = 0
     for v in verdicts:
         print(json.dumps(v.to_json()) if a.json else format_verdict(v, lib), flush=True)
-        worst = max(worst, {"ALLOW": 0, "ERROR": 1, "BLOCK": 2}[v.verdict])
-    sys.exit(worst)
+        worst = max(worst, {"ALLOW": 0, "WARN": 0.5, "ERROR": 1, "BLOCK": 2}[v.verdict])
+    sys.exit({0.5: 3}.get(worst, worst))
 
 
 if __name__ == "__main__":

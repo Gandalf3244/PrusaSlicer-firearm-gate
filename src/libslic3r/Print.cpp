@@ -484,7 +484,7 @@ std::string Print::validate(std::vector<std::string>* warnings) const
         std::vector<const ModelObject*> printed;
         for (const PrintObject *object : m_objects)
             printed.emplace_back(object->model_object());
-        if (std::string refusal = firearm_gate_validate(printed); ! refusal.empty())
+        if (std::string refusal = firearm_gate_validate(printed, false, warnings); ! refusal.empty())
             return refusal;
     }
 

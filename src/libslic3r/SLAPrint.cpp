@@ -649,14 +649,14 @@ std::string SLAPrint::output_filename(const std::string &filename_base) const
     return this->PrintBase::output_filename(m_print_config.output_filename_format.value, default_ext, filename_base, &config);
 }
 
-std::string SLAPrint::validate(std::vector<std::string>*) const
+std::string SLAPrint::validate(std::vector<std::string> *warnings) const
 {
     {
         // Firearm-part gate: nothing identified as a printed-gun part may be sliced.
         std::vector<const ModelObject*> printed;
         for (const SLAPrintObject *po : m_objects)
             printed.emplace_back(po->model_object());
-        if (std::string refusal = firearm_gate_validate(printed, true); ! refusal.empty())
+        if (std::string refusal = firearm_gate_validate(printed, true, warnings); ! refusal.empty())
             return refusal;
     }
 

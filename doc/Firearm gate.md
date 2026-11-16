@@ -72,7 +72,11 @@ the CLI and G-code export alike. Both now call
    bypassed.
 3. The verdict lines are matched to the objects by file name. `BLOCK` becomes
    the refusal above, with the checker's evidence lines; `ALLOW` lets
-   validation continue. An object without a verdict line is a failure.
+   validation continue; `WARN` (a long hole at a bullet diameter and nothing
+   else that identifies a firearm part - pipes and shafts have one too) lets it
+   continue and shows a warning notification naming the object and the bore.
+   An object without a verdict line is a failure. (A gate older than WARN
+   refuses such an object as unreadable: it fails closed.)
 4. Verdicts are cached by the shape-defining volumes (parts, negative volumes,
    modifiers and the options that make them void, SLA drain holes) and the
    instance's shape (M^T M of its linear part and the mirror flag), so moving,
@@ -119,8 +123,8 @@ by stubs the pins leave) and the
 tools that build `data/fingerprints.json` from the reference library are
 documented in the development project (`PIPELINE_STATUS.md` in "Gun 3d model
 detection" on Google Drive), not in this repository. Its JSON contract:
-one object per input file with `verdict` (`ALLOW` / `BLOCK` / `ERROR`),
-`level`, `evidence[]` (`level`, `what`, `body`), exit code 0 / 2 / 1.
+one object per input file with `verdict` (`ALLOW` / `WARN` / `BLOCK` / `ERROR`),
+`level`, `evidence[]` (`level`, `what`, `body`, `blocking`), exit code 0 / 3 / 2 / 1.
 
 ## Latency
 

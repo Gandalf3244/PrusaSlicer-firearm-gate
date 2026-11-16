@@ -24,14 +24,17 @@ class ModelObject;
 // PRUSA_FIREARM_CHECK_TIMEOUT: seconds to wait for one object (default 300).
 
 // Returns an empty string when every object may be printed, otherwise a
-// human readable refusal naming the objects and the evidence found.
+// human readable refusal naming the objects and the evidence found. An object
+// that may be printed with a warning (the checker's WARN verdict: a lone
+// barrel-like bore) adds a message to `warnings`, when given.
 // Fails closed: when the checker cannot be run, the refusal says so.
 // Results are cached per object geometry and scale, so repeated calls
 // (Print::validate() runs after every plate change) are free.
 // The shape checked is the one that would be printed: model parts minus
 // negative volumes and void modifiers (and, with `sla`, minus drain holes),
 // mirrored parts wound the right way out.
-std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects, bool sla = false);
+std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects, bool sla = false,
+                                  std::vector<std::string> *warnings = nullptr);
 
 // GUI: check in the background instead of on the calling (UI) thread. Then
 // firearm_gate_validate() never waits for the checker: an object without a

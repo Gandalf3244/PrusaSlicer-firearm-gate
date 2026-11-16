@@ -46,10 +46,13 @@ namespace bp = boost::process;
 
 struct CheckResult
 {
-    // ALLOW / BLOCK verdict reached; false when the checker could not be run.
+    // ALLOW / WARN / BLOCK verdict reached; false when the checker could not be run.
     bool        decided { false };
     bool        blocked { false };
-    // Evidence lines (BLOCK) or the failure reason (! decided).
+    // WARN: may be printed, the user is told (a long hole at a bullet
+    // diameter and nothing else that identifies a firearm part).
+    bool        warned  { false };
+    // Evidence lines (BLOCK, WARN) or the failure reason (! decided).
     std::string details;
 };
 
@@ -360,7 +363,7 @@ std::string read_file(const fs::path &path)
     return ss.str();
 }
 
-// Evidence lines of one BLOCK verdict, or the reason an input was not decided.
+// Evidence lines of one BLOCK / WARN verdict, or the reason an input was not decided.
 CheckResult result_from_json(const nlohmann::json &verdict)
 {
     CheckResult result;
@@ -369,12 +372,13 @@ CheckResult result_from_json(const nlohmann::json &verdict)
         result.decided = true;
         return result;
     }
-    if (v != "BLOCK") {
+    if (v != "BLOCK" && v != "WARN") {
         result.details = _u8L("the checker could not read the geometry") + ": " + verdict.value("error", std::string());
         return result;
     }
     result.decided = true;
-    result.blocked = true;
+    result.blocked = v == "BLOCK";
+    result.warned  = v == "WARN";
     std::ostringstream ss;
     for (const nlohmann::json &e : verdict.value("evidence", nlohmann::json::array())) {
         std::string level = e.value("level", std::string());
@@ -702,7 +706,7 @@ std::unordered_map<std::string, CheckResult> check_inputs(const CheckerCommand &
     for (size_t i = 0; i < sent.size(); ++ i) {
         CheckResult r = results[i];
         BOOST_LOG_TRIVIAL(info) << "Firearm gate: \"" << sent[i]->name << "\"" << (original_size[i] ? " (original size)" : "")
-                                << " -> " << (! r.decided ? "FAILED" : r.blocked ? "BLOCK" : "ALLOW");
+                                << " -> " << (! r.decided ? "FAILED" : r.blocked ? "BLOCK" : r.warned ? "WARN" : "ALLOW");
         if (original_size[i] && r.blocked)
             r.details = "    " + _u8L("found at the size it was loaded (the object is scaled in PrusaSlicer):") + "\n" + r.details;
         // either size blocking blocks; either failing fails (closed)
@@ -712,6 +716,8 @@ std::unordered_map<std::string, CheckResult> check_inputs(const CheckerCommand &
             if (r.blocked && ! acc.blocked)
                 acc = r;
             else if (! r.decided && acc.decided && ! acc.blocked)
+                acc = r;
+            else if (r.warned && acc.decided && ! acc.blocked && ! acc.warned)
                 acc = r;
         }
     }
@@ -833,7 +839,7 @@ void firearm_gate_prestart()
         s_server.start(checker);
 }
 
-std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects, bool sla)
+std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects, bool sla, std::vector<std::string> *warnings)
 {
     if (objects.empty())
         return {};
@@ -903,7 +909,7 @@ std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects
         for (auto &[key, r] : check_inputs(checker, inputs))
             found[key] = std::move(r);
 
-    std::ostringstream blocked, failed, checking;
+    std::ostringstream blocked, failed, checking, warned;
     std::vector<const ModelObject*> reported;
     for (const Item &item : items) {
         if (std::find(reported.begin(), reported.end(), item.object) != reported.end())
@@ -926,7 +932,19 @@ std::string firearm_gate_validate(const std::vector<const ModelObject*> &objects
         } else if (r.blocked) {
             blocked << "  \"" << item.object->name << "\"\n" << r.details;
             reported.emplace_back(item.object);
+        } else if (r.warned) {
+            warned << "  \"" << item.object->name << "\"\n" << r.details;
+            reported.emplace_back(item.object);
         }
+    }
+    if (! warned.str().empty()) {
+        // a lone bore: may be printed (pipes, tubes and shafts have one), the user is told
+        std::string text = _u8L("Possible firearm part: the following object has a long hole at a bullet diameter "
+                                "(as a barrel has) but nothing else that identifies a firearm part. "
+                                "Slicing is allowed.") + "\n" + warned.str();
+        BOOST_LOG_TRIVIAL(warning) << "Firearm gate: " << text;
+        if (warnings != nullptr)
+            warnings->emplace_back(std::move(text));
     }
 
     std::string message;
