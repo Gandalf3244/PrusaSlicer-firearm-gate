@@ -44,7 +44,7 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
-from .calibers import bore_evidence, known_bore, load_known_bores
+from .calibers import LONE_WARN_PAIRS, bore_evidence, known_bore, load_known_bores
 from .detect import detect, load_fingerprints, signature_of_mesh
 from .families import family_matches, load_family_patterns, platform_pairs
 from .fingerprint import elements
@@ -163,23 +163,22 @@ class Library:
         # known platform pin pairs: not a guessed transform (a pair 0.2 mm wide in separation
         # is not evidence at a wild scale)
         for name in [] if guessed else sorted(set(platform_pairs(elements(sig, 0.9)))):
-            out.append(Evidence("platform", f"platform pin pair: {name}", "", "", "", 1.0, body))
-        found = bore_evidence(sig, mesh) if bores else []
-        if found:
-            # a second signal: other evidence, the bore of a known barrel, or a
-            # fingerprint match too weak to block alone
-            weak = None
-            for b in found:
-                what = f"barrel bore {b['caliber']} (Ø{b['d']:.2f} x {b['L']:.0f} mm)"
-                if not out and (ref := known_bore(b, self.known_bores)):
-                    second = f"the bore of {ref.split('/')[-1]}"
-                elif not out:
-                    weak = self._weak_match(sig, fps) if weak is None else weak
-                    second = weak
-                else:
-                    second = ""
-                out.append(Evidence("bore", what + (f" + {second}" if second else ""), "", "", "barrel", 1.0, body,
-                                    blocking=bool(out) or bool(second)))
+            out.append(Evidence("platform", f"platform pin pair: {name}", "", "", "", 1.0, body,
+                                blocking=name not in LONE_WARN_PAIRS))
+        # A barrel bore (and the AR takedown + pivot pin pair) blocks only with a second
+        # signal: other evidence, the bore of a known barrel, or a fingerprint match too
+        # weak to block alone. Alone it is a warning (a trumpet lead pipe, imperial CAD).
+        for b in bore_evidence(sig, mesh) if bores else []:
+            what = f"barrel bore {b['caliber']} (Ø{b['d']:.2f} x {b['L']:.0f} mm)"
+            ref = known_bore(b, self.known_bores)
+            out.append(Evidence("bore", what + (f" + the bore of {ref.split('/')[-1]}" if ref else ""), "", "", "barrel",
+                                1.0, body, blocking=bool(ref)))
+        lone = [e for e in out if not e.blocking]
+        if lone and not _blocks(out) and (weak := self._weak_match(sig, fps)):
+            lone[0].what += f" + {weak}"
+        if lone and (_blocks(out) or weak):
+            for e in lone:
+                e.blocking = True
         return out
 
     def _weak_match(self, sig: dict, fps) -> str:

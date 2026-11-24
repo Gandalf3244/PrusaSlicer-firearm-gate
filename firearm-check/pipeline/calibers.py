@@ -73,8 +73,12 @@ PLATFORM_PAIRS = [
     {"name": "AR-15/AR-10 hammer+trigger pins (0.154\")", "d": (3.85, 4.05), "angle": 0.0,
      "sep": (22.75, 22.95)},
     {"name": "AR-15 takedown+pivot pins (0.250\")", "d": (6.3, 7.05), "angle": 0.0,
-     "sep": (161.0, 163.5)},          # 6.375" nominal between pivot and takedown pin centres
+     "sep": (161.0, 163.5), "alone": False},   # 6.375" nominal between pivot and takedown pin centres
 ]
+# "alone": False - like a lone bore, the pair blocks only with a second signal (else WARN):
+# two 1/4" holes 6.4" apart are common in inch CAD (5 Thingi10K / ABC files, 2026-11-16),
+# and no held-out library part was caught by this pair alone (data/analysis_generalization.jsonl).
+LONE_WARN_PAIRS = {p["name"] for p in PLATFORM_PAIRS if not p.get("alone", True)}
 
 # standard sizes any mechanical object may carry: drill fractions, metric
 # clearance holes and common CAD fillet radii. A hole at one of these is

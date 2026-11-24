@@ -72,9 +72,10 @@ the CLI and G-code export alike. Both now call
    bypassed.
 3. The verdict lines are matched to the objects by file name. `BLOCK` becomes
    the refusal above, with the checker's evidence lines; `ALLOW` lets
-   validation continue; `WARN` (a long hole at a bullet diameter and nothing
-   else that identifies a firearm part - pipes and shafts have one too) lets it
-   continue and shows a warning notification naming the object and the bore.
+   validation continue; `WARN` (a long hole at a bullet diameter, or the AR-15
+   takedown + pivot pin spacing, and nothing else that identifies a firearm
+   part - pipes, shafts and inch CAD have them too) lets it continue and shows a
+   warning notification naming the object and the feature.
    An object without a verdict line is a failure. (A gate older than WARN
    refuses such an object as unreadable: it fails closed.)
 4. Verdicts are cached by the shape-defining volumes (parts, negative volumes,
