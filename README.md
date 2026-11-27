@@ -63,7 +63,7 @@ identified, 0 false positives on 511 non-gun files. Details, the JSON contract a
 ### Windows installer
 
 **Download: [PrusaSlicer-FirearmGate-2.9.6-win64.exe](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/download/gate-v2.9.6-8/PrusaSlicer-FirearmGate-2.9.6-win64.exe)**
-(130 MB, from the [latest release](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/latest);
+(500 MB with the AI model, from the [latest release](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases/latest);
 all versions are under [releases](https://github.com/Gandalf3244/PrusaSlicer-firearm-gate/releases)).
 
 Run it. Windows SmartScreen will warn that the installer is unsigned: choose
