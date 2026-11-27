@@ -1,7 +1,8 @@
 """Assemble the self-contained Windows checker that the installer ships at
     <PrusaSlicer>\\resources\\firearm-check\\
-        python\\   official embeddable CPython + numpy/scipy/trimesh/networkx (Windows wheels)
-        app\\      pipeline/, data/fingerprints.json, data/family_patterns.json, data/library_bores.json, scripts/sldprt2stl.py
+        python\\   official embeddable CPython + numpy/scipy/trimesh/networkx/onnxruntime (Windows wheels)
+        app\\      pipeline/, data/fingerprints.json, data/family_patterns.json, data/library_bores.json,
+                  data/ai/ (AI score model), scripts/sldprt2stl.py
 
     python make_checker_runtime.py <project root> <output dir> [--python 3.13]
 
@@ -23,7 +24,8 @@ from pathlib import Path
 
 # networkx: trimesh's Trimesh.split() repairs each body with fill_holes(), which needs it -
 # a plate with an open (non-watertight) body crashed the checker without it
-PINNED = ["numpy==2.5.3", "scipy==1.18.1", "trimesh==5.1.0", "networkx==3.6.1"]
+# onnxruntime: the AI score's image encoder (pipeline/ai.py)
+PINNED = ["numpy==2.5.3", "scipy==1.18.1", "trimesh==5.1.0", "networkx==3.6.1", "onnxruntime==1.32.0"]
 PYTHON_FTP = "https://www.python.org/ftp/python/"
 
 
@@ -43,11 +45,29 @@ def newest_embeddable(minor: str) -> str:
     sys.exit(f"no embeddable zip for Python {minor}")
 
 
+def copy_ai_model(src: Path, dst: Path) -> None:
+    """data/ai/: ai.json + license from git, the encoder and heads it names from the
+    ai-model release (too big for git), each checked against the sha256 in ai.json."""
+    import hashlib
+    import json
+    cfg = json.loads((src / "ai.json").read_text())
+    dst.mkdir(parents=True)
+    for name in ["ai.json", "LICENSE-DINOv2.txt", *cfg["files"]]:
+        f = src / name
+        if not f.exists():
+            sys.exit(f"{f} missing (download the ai-model release assets into {src}, or pass --no-ai)")
+        want = cfg["files"].get(name)
+        if want and hashlib.sha256(f.read_bytes()).hexdigest() != want:
+            sys.exit(f"{f}: sha256 differs from ai.json")
+        shutil.copy(f, dst / name)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", type=Path, help="folder with pipeline/, data/, scripts/")
     ap.add_argument("out", type=Path)
     ap.add_argument("--python", default="3.13", help="CPython minor version")
+    ap.add_argument("--no-ai", action="store_true", help="ship without data/ai/ (the AI score is then off)")
     a = ap.parse_args()
 
     if a.out.exists():
@@ -81,6 +101,8 @@ def main():
     (app / "data").mkdir()
     for f in ("fingerprints.json", "family_patterns.json", "library_bores.json"):
         shutil.copy(a.root / "data" / f, app / "data" / f)
+    if not a.no_ai:
+        copy_ai_model(a.root / "data" / "ai", app / "data" / "ai")
     (app / "scripts").mkdir()
     shutil.copy(a.root / "scripts" / "sldprt2stl.py", app / "scripts" / "sldprt2stl.py")
     (a.out / "VERSION.txt").write_text(f"python {full}\n" + "\n".join(w.name for w in wheels) + "\n")

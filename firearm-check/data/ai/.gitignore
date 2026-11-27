@@ -1,0 +1,3 @@
+# the encoder and heads come from the ai-model release (see packaging/windows/make_checker_runtime.py)
+*.onnx
+*.npz

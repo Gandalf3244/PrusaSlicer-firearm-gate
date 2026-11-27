@@ -13,7 +13,8 @@ validation notification reads, for example:
 Slicing refused: the plate contains a firearm part.
 The following object matches the reference library of printed-gun parts
 (design = identical part, lineage = derivative of a known design,
-platform = firearm-family interface, bore = barrel at a bullet diameter):
+platform = firearm-family interface, bore = barrel at a bullet diameter,
+ai = a firearm-like shape by the AI score plus a loose fingerprint match or a warning feature):
   "AR-15_Reinforced_Lower_Receiver.stl"
     design   frame/receiver: arlower-full-strengthened1.stl (AR-15_Lower_Receiver_v1-haveblue), 1/1 fingerprints
     lineage  frame/receiver: M-Lower-V3.stl (AR-15_Lower_Receiver_v3-DSL), 2/2 fingerprints
@@ -78,6 +79,17 @@ the CLI and G-code export alike. Both now call
    warning notification naming the object and the feature.
    An object without a verdict line is a failure. (A gate older than WARN
    refuses such an object as unreadable: it fails closed.)
+   The checker's AI score adds one more `BLOCK` (level `ai`): renders of the
+   object from 12 directions go through a frozen DINOv2-Base image encoder
+   (Apache 2.0, Meta Platforms; ONNX Runtime on the CPU) and small heads trained
+   on the reference library (every design held out once) with foam-dart blasters
+   and airsoft parts as non-guns. When nothing else identifies the object,
+   a score above the threshold blocks together with either one fingerprint of
+   any reference part matching at four times the usual hole-size tolerance, or
+   a warning feature. The score is computed only when one of those is present
+   (about a third of printer parts; 1-3 s on a 4-thread CPU, ~640 MB) and never
+   blocks or warns on its own. Without `app/data/ai/` or onnxruntime, or with
+   `FIREARM_CHECK_NO_AI=1`, the checker behaves as without it.
 4. Verdicts are cached by the shape-defining volumes (parts, negative volumes,
    modifiers and the options that make them void, SLA drain holes) and the
    instance's shape (M^T M of its linear part and the mirror flag), so moving,
@@ -114,6 +126,7 @@ the failure has been shown for 30 s).
 |---|---|---|
 | `PRUSA_FIREARM_CHECK` | checker executable | a bundle at `<resources>/firearm-check/` (private Python runtime in `python/`, the pipeline in `app/`; what the Windows installer ships, see `packaging/windows/`), then `firearm-check` on `PATH`, then `~/.local/bin/firearm-check` |
 | `PRUSA_FIREARM_CHECK_TIMEOUT` | seconds allowed per object (a run over n objects gets n times this) | 300 |
+| `FIREARM_CHECK_NO_AI` | `1`: skip the AI score | unset |
 | `PRUSA_FIREARM_CHECK_MAX_FACETS` | largest mesh handed to the checker; denser objects are reduced to it first (minimum 10000) | 1000000 |
 
 `firearm-check` is a launcher for the detection pipeline

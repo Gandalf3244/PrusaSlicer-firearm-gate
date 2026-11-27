@@ -35,6 +35,10 @@ class Band:
 
 TIGHT = Band(diameter=0.02, length=0.10, distance=0.05, angle_deg=0.5, coverage=0.05)
 LOOSE = Band(diameter=0.12, length=0.50, distance=0.30, angle_deg=2.0, coverage=0.10)
+# The AI-gated rule (check.py, pipeline/ai.py): LOOSE with the diameter, length and
+# coverage tolerances x4 (distances and angles as LOOSE), any single fingerprint counting.
+# Chosen on held-out designs ("d4"; ~/gun3d-data/oracle, ai/combine_any.py, splithalf.py).
+AI_BAND = Band(diameter=0.48, length=2.0, distance=0.30, angle_deg=2.0, coverage=0.40)
 
 # Diameters shared by many models (step 2 collision table). A single hole at
 # one of these sizes is never a fingerprint on its own; it needs a compound

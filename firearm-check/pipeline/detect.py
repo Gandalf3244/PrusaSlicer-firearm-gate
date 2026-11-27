@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 import trimesh
@@ -23,7 +24,11 @@ from .chance import is_weak
 from .fingerprint import PLUG_OVERSIZE, Fingerprint, elements, match
 from .signature import global_features, primitive_features
 from .primitives import segment
-from .tolerances import LOOSE, TIGHT
+from .tolerances import LOOSE, TIGHT, Band
+
+
+class DetectTimeout(Exception):
+    """detect() passed its `deadline`."""
 from .units import infer_scale, load_mesh
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,7 +87,8 @@ SCALED_ALONE = 3   # elements a single fingerprint needs to identify a part at a
 
 
 def detect(sig: dict, fps: list[Fingerprint], loose: bool = False,
-           scale_range: tuple[float, float] | None = None, report_weak: bool = False) -> list[dict]:
+           scale_range: tuple[float, float] | None = None, report_weak: bool = False,
+           band: Band | None = None, deadline: float | None = None) -> list[dict]:
     """Labels for one signature. Every fingerprint is matched; hits are
     grouped per reference part and reported with `fired` = how many of that
     part's independent fingerprints were found (k of n): a fused input that
@@ -99,8 +105,12 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False,
     reported when its strong matches meet `min_fired`, or when at least two
     of its fingerprints fired in all. `report_weak`: also return the parts
     that only weak matches found (marked "weak_only"), as corroboration for
-    other evidence (check: a bore)."""
-    band, name = (LOOSE, "LOOSE") if loose else (TIGHT, "TIGHT")
+    other evidence (check: a bore).
+    `band`: matching tolerances in place of LOOSE (`loose`) - the widened band of the
+    AI-gated rule (tolerances.AI_BAND); the chance rules keep their own LOOSE.
+    `deadline`: time.monotonic() value; passing it between fingerprints raises
+    DetectTimeout (a target with very many candidate elements)."""
+    band, name = ((band or LOOSE), "LOOSE") if loose else (TIGHT, "TIGHT")
     lo_s, hi_s = scale_range or (1.0, 1.0)
     per_part: dict[str, dict] = {}
     # a fingerprint can only match if each of its elements has a target element
@@ -130,6 +140,8 @@ def detect(sig: dict, fps: list[Fingerprint], loose: bool = False,
         return False
 
     for fp in fps:
+        if deadline is not None and time.monotonic() > deadline:
+            raise DetectTimeout
         if (loose or scale_range is not None) and getattr(fp, "tight_only", False):
             continue
         if not all(possible(fh) for fh in fp.holes):

@@ -1,0 +1,15 @@
+{
+ "version": "2026-11-26",
+ "encoder": "dinov2_base.onnx",
+ "heads": "heads.npz",
+ "threshold": 0.786,
+ "threshold_note": "0.5 % of non-gun test files (Thingi10K / ABC holdout halves, printer parts) score above it; mean of 25 heads (5 design-held-out folds x 5 seeds)",
+ "renderer": "pipeline.ai.render_views (12 principal-frame views, 224 px, 300k surface samples)",
+ "encoder_source": "facebook/dinov2-base (Apache 2.0), output [CLS | mean patch], fp32",
+ "validation": "~/gun3d-data/ai: scores_mil_np_rep0.5_v4_design.jsonl, scores_fresh_mil_np_rep0.5_v4.jsonl",
+ "files": {
+  "dinov2_base.onnx": "5d8cb112df8cf779d0c90d3a07bb1bd56f9ed5e4e9c535cdf9256202534af234",
+  "heads.npz": "be1b84f4ba3dbac1cf4d6a58f0dda6ad40c9a0f7bb6bfe5a90c73728e2f22cfa"
+ },
+ "training_note": "non-guns include 372 replica parts, half of every non-gun batch, held out by project: foam-dart blasters / airsoft accessories (GitHub: Gryphon, Lynx, Step1, 3dArmory) and 64 of the owner's airsoft parts (compilation of airsoft parts folder + airsoft_user). Left out: the FGC-6 assembly, and the '3011' pistol project (receiver has the AR-15 hammer/trigger pin spacing; owner's decision 2026-11-26)"
+}

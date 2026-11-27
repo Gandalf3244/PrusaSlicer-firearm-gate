@@ -87,6 +87,14 @@ jobs:
         with:
           python-version: "3.13"
 
+      # The AI score's encoder and heads (~390 MB) are release assets, not git files;
+      # make_checker_runtime.py checks them against the sha256 values in data/ai/ai.json.
+      - name: Fetch the AI score model
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download ai-model-2026-11-26 -R "$GITHUB_REPOSITORY" -D firearm-check/data/ai -p dinov2_base.onnx -p heads.npz
+
       - name: Assemble checker runtime
         run: python packaging\windows\make_checker_runtime.py firearm-check checker-runtime
 
@@ -115,6 +123,10 @@ jobs:
           if errorlevel 1 ( echo expected ALLOW for a plate with an open body & exit /b 1 )
           ..\python\python.exe -m pipeline.check --json --units mm ..\..\testparts\blocked.stl
           if not errorlevel 2 ( echo expected BLOCK & exit /b 1 )
+          copy ..\..\packaging\windows\test_ai.py . >nul
+          ..\python\python.exe test_ai.py
+          if errorlevel 1 ( echo AI score model failed & exit /b 1 )
+          del test_ai.py
           exit /b 0
 
       - name: Stage and build installer

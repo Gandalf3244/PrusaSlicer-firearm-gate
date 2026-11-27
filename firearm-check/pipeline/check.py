@@ -24,6 +24,15 @@ Decision (every rule measured on the negative set, 0/432 firings each):
               have one, data/analysis_chance.txt)
     scaled    a shipped part identified at a uniform scale within SCALE_RANGE
               (resized in the slicer / shrink compensation; detect(scale_range=...))
+    ai        nothing above blocks, but the learned score (pipeline/ai.py: renders
+              of the part, DINOv2 features, heads trained with every library design
+              held out once) says firearm part (> ai.json threshold, 0.5 % of non-gun
+              test files) AND either a fingerprint of any library part matches at the
+              widened AI_BAND (one fingerprint is enough) or there is a warning (lone
+              bore / AR pin pair). Held-out designs: shipped key parts 29 -> 37 %,
+              ~1 extra block per 1000 non-gun files (fresh ABC chunk). The score alone
+              never blocks or warns; airsoft / foam blasters are trained as non-guns. Off with --no-ai or FIREARM_CHECK_NO_AI=1, or
+              when the model files / onnxruntime are missing.
 Any of them -> BLOCK; only a lone bore -> WARN (may be printed, the user is told).
 Otherwise ALLOW. When nothing is found, the constellations
 are tried at a free scale, then with a per-axis stretch undone (read off the
@@ -36,6 +45,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from dataclasses import asdict, dataclass, field
@@ -44,13 +54,15 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
+from . import ai
 from .calibers import LONE_WARN_PAIRS, bore_evidence, known_bore, load_known_bores
-from .detect import detect, load_fingerprints, signature_of_mesh
+from .detect import DetectTimeout, detect, load_fingerprints, signature_of_mesh
 from .families import family_matches, load_family_patterns, platform_pairs
 from .fingerprint import elements
 from .pool import trim_after
 from .resize import resized_scales, resized_signature
 from .roles import is_grip, role_of
+from .tolerances import AI_BAND
 from .units import UNIT_SCALE, infer_scale, prepare_mesh
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,7 +95,7 @@ def alternative_scales(raw: trimesh.Trimesh, chosen: float) -> list[float]:
 
 @dataclass
 class Evidence:
-    level: str                  # design | lineage | platform | bore
+    level: str                  # design | lineage | platform | bore | scaled | ai
     what: str                   # human-readable
     reference: str = ""         # library part path (design / lineage)
     model: str = ""
@@ -190,11 +202,35 @@ class Library:
         return ""
 
 
-_LEVEL_RANK = {"design": 0, "lineage": 1, "platform": 2, "bore": 3, "scaled": 4}
+_LEVEL_RANK = {"design": 0, "lineage": 1, "platform": 2, "bore": 3, "scaled": 4, "ai": 5}
+AI_MATCH_SECONDS = 10.0     # widened matching cut short: counted as a match (as it was measured)
 
 
 def _blocks(ev: list[Evidence]) -> bool:
     return any(e.blocking for e in ev)
+
+
+def ai_evidence(lib: "Library", sig: dict, ev: list[Evidence], mesh: trimesh.Trimesh, body: str) -> list[Evidence]:
+    """Level ai (module docstring): a reason first - a warning in `ev`, or a fingerprint of
+    any library part at AI_BAND - and the learned score only then (rendering + the encoder
+    take seconds on a laptop CPU; most files have no reason)."""
+    if os.environ.get("FIREARM_CHECK_NO_AI") == "1" or (m := ai.model()) is None:
+        return []
+    lone = [e for e in ev if not e.blocking]
+    why = lone[0].what if lone else ""
+    if not why:
+        try:
+            hits = detect(sig, lib.fps, loose=True, report_weak=True, band=AI_BAND,
+                          deadline=time.monotonic() + AI_MATCH_SECONDS)
+            why = f"widened match {hits[0]['reference'].split('/')[-1]}" if hits else ""
+        except DetectTimeout:
+            why = "widened match (too many candidate holes to finish)"
+    if not why:
+        return []
+    s = m.score(mesh)
+    if s is None or s <= m.threshold:
+        return []
+    return [Evidence("ai", f"{why} + looks like a firearm part (AI score {s:.2f})", "", "", "", round(s, 2), body)]
 
 
 def scaled_evidence(lib: "Library", sig: dict, body: str) -> list[Evidence]:
@@ -384,6 +420,8 @@ def check_mesh(raw: trimesh.Trimesh, name: str, lib: Library, scale: float | Non
                     break
                 ev_b += more(lib, sb_sig, f"body {i}")
             ev += ev_b
+    if not _blocks(ev):
+        ev += ai_evidence(lib, sig, ev, whole, "whole")
     # one line per distinct finding
     uniq: dict[tuple, Evidence] = {}
     for e in ev:
@@ -503,7 +541,10 @@ def main():
     ap.add_argument("--json", action="store_true", help="one JSON object per line instead of text")
     ap.add_argument("--thorough", action="store_true", help="report every body of a plate, not just the first blocking pass")
     ap.add_argument("--workers", type=int, default=1, help="parallel processes when checking many files")
+    ap.add_argument("--no-ai", action="store_true", help="skip the AI-gated rule (same as FIREARM_CHECK_NO_AI=1)")
     a = ap.parse_args()
+    if a.no_ai:
+        os.environ["FIREARM_CHECK_NO_AI"] = "1"         # inherited by --workers processes
     lib = Library()
     scale = UNIT_SCALE[a.units] if a.units else None
     if a.serve:
